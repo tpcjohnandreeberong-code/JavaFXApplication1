@@ -25,7 +25,7 @@ public class MainController {
             return;
         }
 
-        errorLabel.setText(""); // clear error
+        errorLabel.setText(""); 
 
         System.out.println("Username: " + user);
         System.out.println("Password: " + pass);
@@ -36,5 +36,7 @@ public class MainController {
         alert.setContentText("Welcome, " + user + "!");
         alert.showAndWait();
     }
+
+    // Sample Commit
 
 }
