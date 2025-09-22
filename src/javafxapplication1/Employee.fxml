@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.lang.*?>
+<?import java.util.*?>
+<?import javafx.scene.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.*?>
+
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="javafxapplication1.EmployeeController" spacing="12.0">
+<children>
+<HBox alignment="CENTER_LEFT" spacing="10.0">
+<children>
+<Label text="Employees" style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
+<Pane HBox.hgrow="ALWAYS" />
+<TextField fx:id="searchField" promptText="Search name or ID" prefWidth="220.0" />
+<Button text="Search" onAction="#onSearch" />
+<Button text="Add" onAction="#onAdd" />
+<Button text="Edit" onAction="#onEdit" />
+<Button text="Delete" onAction="#onDelete" />
+</children>
+<padding>
+<Insets top="4.0" right="0.0" bottom="4.0" left="0.0" />
+</padding>
+</HBox>
+
+<TableView fx:id="table" prefHeight="480.0">
+<columns>
+<TableColumn fx:id="colId" text="ID" prefWidth="80.0" />
+<TableColumn fx:id="colName" text="Name" prefWidth="220.0" />
+<TableColumn fx:id="colPosition" text="Position" prefWidth="160.0" />
+<TableColumn fx:id="colDepartment" text="Department" prefWidth="160.0" />
+<TableColumn fx:id="colSalary" text="Salary" prefWidth="120.0" />
+</columns>
+</TableView>
+</children>
+<padding>
+<Insets top="12.0" right="12.0" bottom="12.0" left="12.0" />
+</padding>
+</VBox>
+
+

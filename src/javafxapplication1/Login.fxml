@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.lang.*?>
+<?import java.util.*?>
+<?import javafx.scene.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.*?>
+<?import javafx.scene.effect.*?>
+
+<AnchorPane id="AnchorPane" prefHeight="400.0" prefWidth="600.0" xmlns:fx="http://javafx.com/fxml/1" fx:controller="javafxapplication1.LoginController" style="-fx-background-color: linear-gradient(to bottom right, #2e7d32, #66bb6a);">
+<children>
+<StackPane AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+<children>
+<VBox spacing="14.0" alignment="CENTER" maxWidth="360.0">
+<children>
+<Label text="School Payroll" style="-fx-text-fill: white; -fx-font-size: 22px; -fx-font-weight: bold; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.25), 6, 0.2, 0, 2);" />
+<VBox maxWidth="360.0" style="-fx-background-color: white; -fx-background-radius: 14; -fx-border-radius: 14; -fx-border-color: rgba(255,255,255,0.35); -fx-border-width: 1;" fillWidth="true">
+<effect>
+<DropShadow radius="14.0" color="#1b5e20" spread="0.05" offsetY="4.0" />
+</effect>
+<children>
+<VBox spacing="12.0" alignment="CENTER_LEFT" fillWidth="true">
+<children>
+<Label text="Login" style="-fx-text-fill: #1b5e20; -fx-font-size: 18px; -fx-font-weight: bold;" />
+<TextField fx:id="usernameField" promptText="Username" maxWidth="Infinity" style="-fx-background-radius: 8; -fx-border-radius: 8; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-faint-focus-color: #a5d6a7;" />
+<PasswordField fx:id="passwordField" promptText="Password" maxWidth="Infinity" style="-fx-background-radius: 8; -fx-border-radius: 8; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-faint-focus-color: #a5d6a7;" />
+<HBox spacing="10.0" alignment="CENTER_LEFT">
+<children>
+<CheckBox fx:id="rememberMeCheck" text="Remember me" />
+<Label fx:id="messageLabel" textFill="#d32f2f" />
+</children>
+</HBox>
+<Button fx:id="loginButton" text="Login" defaultButton="true" onAction="#onLogin" maxWidth="Infinity" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 8;" />
+</children>
+<padding>
+<Insets top="20.0" right="20.0" bottom="20.0" left="20.0" />
+</padding>
+</VBox>
+</children>
+</VBox>
+<Hyperlink text="Forgot password?" style="-fx-text-fill: white; -fx-underline: true;" onAction="#onForgotPassword" />
+</children>
+<padding>
+<Insets top="30.0" right="20.0" bottom="30.0" left="20.0" />
+</padding>
+</VBox>
+</children>
+</StackPane>
+</children>
+</AnchorPane>
