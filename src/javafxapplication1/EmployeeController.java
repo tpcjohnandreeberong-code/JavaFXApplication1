@@ -10,6 +10,8 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import java.net.URL;
 import java.util.Optional;
 import java.util.ResourceBundle;
+import java.util.Set;
+import java.util.HashSet;
 import javafx.scene.layout.GridPane;
 
 public class EmployeeController implements Initializable {
@@ -36,6 +38,7 @@ public class EmployeeController implements Initializable {
     }
 
     @FXML private TextField searchField;
+    @FXML private ComboBox<String> departmentFilter;
     @FXML private TableView<Employee> table;
     @FXML private TableColumn<Employee, String> colId;
     @FXML private TableColumn<Employee, String> colName;
@@ -44,15 +47,46 @@ public class EmployeeController implements Initializable {
     @FXML private TableColumn<Employee, Double> colSalary;
 
     private final ObservableList<Employee> data = FXCollections.observableArrayList();
+    private final ObservableList<String> departments = FXCollections.observableArrayList();
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
+        setupTableColumns();
+        setupDepartmentFilter();
+        loadSampleData();
+    }
+
+    private void setupTableColumns() {
         colId.setCellValueFactory(new PropertyValueFactory<>("id"));
         colName.setCellValueFactory(new PropertyValueFactory<>("name"));
         colPosition.setCellValueFactory(new PropertyValueFactory<>("position"));
         colDepartment.setCellValueFactory(new PropertyValueFactory<>("department"));
         colSalary.setCellValueFactory(new PropertyValueFactory<>("salary"));
 
+        // Set column resize policy to fill available space
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+
+        // Format salary column
+        colSalary.setCellFactory(column -> new TableCell<Employee, Double>() {
+            @Override
+            protected void updateItem(Double item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                } else {
+                    setText(String.format("₱%,.2f", item));
+                }
+            }
+        });
+    }
+
+    private void setupDepartmentFilter() {
+        departments.addAll("All Departments", "Math", "Science", "English", "Admin", "Finance", "ICT", "Library", "Transport", "HR", "Registrar", "Student Affairs", "Clinic");
+        departmentFilter.setItems(departments);
+        departmentFilter.setValue("All Departments");
+    }
+
+    private void loadSampleData() {
         data.setAll(loadEmployees());
         table.setItems(data);
     }
@@ -90,15 +124,24 @@ public class EmployeeController implements Initializable {
 
     @FXML
     private void onSearch() {
-        String q = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase();
-        if (q.isEmpty()) {
+        String searchText = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase();
+        String selectedDept = departmentFilter.getValue();
+        
+        if (searchText.isEmpty() && (selectedDept == null || selectedDept.equals("All Departments"))) {
             table.setItems(data);
             return;
         }
+
         ObservableList<Employee> filtered = FXCollections.observableArrayList();
-        for (Employee e : data) {
-            if (e.getId().toLowerCase().contains(q) || e.getName().toLowerCase().contains(q)) {
-                filtered.add(e);
+        for (Employee employee : data) {
+            boolean matchesSearch = searchText.isEmpty() || 
+                                  employee.getId().toLowerCase().contains(searchText) || 
+                                  employee.getName().toLowerCase().contains(searchText);
+            boolean matchesDept = selectedDept == null || selectedDept.equals("All Departments") || 
+                                employee.getDepartment().equals(selectedDept);
+            
+            if (matchesSearch && matchesDept) {
+                filtered.add(employee);
             }
         }
         table.setItems(filtered);
@@ -108,7 +151,10 @@ public class EmployeeController implements Initializable {
     private void onAdd() {
         Dialog<Employee> dialog = buildEmployeeDialog(null);
         Optional<Employee> result = dialog.showAndWait();
-        result.ifPresent(data::add);
+        result.ifPresent(employee -> {
+            data.add(employee);
+            showSuccessAlert("Employee added successfully!");
+        });
     }
 
     @FXML
@@ -141,35 +187,114 @@ public class EmployeeController implements Initializable {
 
     private Dialog<Employee> buildEmployeeDialog(Employee existing) {
         Dialog<Employee> dialog = new Dialog<>();
-        dialog.setTitle(existing == null ? "Add Employee" : "Edit Employee");
+        dialog.setTitle(existing == null ? "Add New Employee" : "Edit Employee");
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        
+        // Style the dialog
+        dialog.getDialogPane().setStyle("-fx-background-color: #f5f5f5;");
+        dialog.getDialogPane().setPrefSize(500, 400);
 
+        // Create form fields with modern styling
         TextField idField = new TextField(existing == null ? "" : existing.getId());
+        idField.setPromptText("Enter Employee ID (e.g., E-001)");
+        idField.setStyle("-fx-background-radius: 6; -fx-border-radius: 6; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-padding: 8;");
+        
         TextField nameField = new TextField(existing == null ? "" : existing.getName());
+        nameField.setPromptText("Enter Full Name");
+        nameField.setStyle("-fx-background-radius: 6; -fx-border-radius: 6; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-padding: 8;");
+        
         TextField positionField = new TextField(existing == null ? "" : existing.getPosition());
-        TextField departmentField = new TextField(existing == null ? "" : existing.getDepartment());
-        TextField salaryField = new TextField(existing == null ? String.valueOf(existing.getSalary()) : String.valueOf(existing.getSalary()));
+        positionField.setPromptText("Enter Position (e.g., Teacher I)");
+        positionField.setStyle("-fx-background-radius: 6; -fx-border-radius: 6; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-padding: 8;");
+        
+        ComboBox<String> departmentCombo = new ComboBox<>();
+        departmentCombo.getItems().addAll("Math", "Science", "English", "Admin", "Finance", "ICT", "Library", "Transport", "HR", "Registrar", "Student Affairs", "Clinic", "Filipino", "AP", "MAPEH");
+        departmentCombo.setValue(existing == null ? "Select Department" : existing.getDepartment());
+        departmentCombo.setPromptText("Select Department");
+        departmentCombo.setStyle("-fx-background-radius: 6; -fx-border-radius: 6; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-padding: 8;");
+        
+        TextField salaryField = new TextField(existing == null ? "" : String.valueOf(existing.getSalary()));
+        salaryField.setPromptText("Enter Salary (e.g., 25000)");
+        salaryField.setStyle("-fx-background-radius: 6; -fx-border-radius: 6; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-padding: 8;");
 
+        // Create styled labels
+        Label idLabel = new Label("Employee ID:");
+        idLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-font-size: 14px;");
+        
+        Label nameLabel = new Label("Full Name:");
+        nameLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-font-size: 14px;");
+        
+        Label positionLabel = new Label("Position:");
+        positionLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-font-size: 14px;");
+        
+        Label departmentLabel = new Label("Department:");
+        departmentLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-font-size: 14px;");
+        
+        Label salaryLabel = new Label("Salary:");
+        salaryLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-font-size: 14px;");
+
+        // Create form layout
         GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.addRow(0, new Label("ID"), idField);
-        grid.addRow(1, new Label("Name"), nameField);
-        grid.addRow(2, new Label("Position"), positionField);
-        grid.addRow(3, new Label("Department"), departmentField);
-        grid.addRow(4, new Label("Salary"), salaryField);
+        grid.setHgap(20);
+        grid.setVgap(15);
+        grid.setPadding(new javafx.geometry.Insets(20));
+        
+        grid.addRow(0, idLabel, idField);
+        grid.addRow(1, nameLabel, nameField);
+        grid.addRow(2, positionLabel, positionField);
+        grid.addRow(3, departmentLabel, departmentCombo);
+        grid.addRow(4, salaryLabel, salaryField);
+        
+        // Set column constraints for better layout
+        javafx.scene.layout.ColumnConstraints col1 = new javafx.scene.layout.ColumnConstraints();
+        col1.setPrefWidth(120);
+        javafx.scene.layout.ColumnConstraints col2 = new javafx.scene.layout.ColumnConstraints();
+        col2.setPrefWidth(300);
+        grid.getColumnConstraints().addAll(col1, col2);
+        
         dialog.getDialogPane().setContent(grid);
+
+        // Style the buttons
+        Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
+        okButton.setStyle("-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;");
+        
+        Button cancelButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.CANCEL);
+        cancelButton.setStyle("-fx-background-color: #f5f5f5; -fx-text-fill: #666; -fx-border-color: #ddd; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8 16;");
 
         dialog.setResultConverter(btn -> {
             if (btn == ButtonType.OK) {
+                // Validate inputs
+                if (idField.getText().trim().isEmpty()) {
+                    showInfo("Please enter Employee ID.");
+                    return null;
+                }
+                if (nameField.getText().trim().isEmpty()) {
+                    showInfo("Please enter Full Name.");
+                    return null;
+                }
+                if (positionField.getText().trim().isEmpty()) {
+                    showInfo("Please enter Position.");
+                    return null;
+                }
+                if (departmentCombo.getValue() == null || departmentCombo.getValue().equals("Select Department")) {
+                    showInfo("Please select Department.");
+                    return null;
+                }
+                
                 double salary;
                 try {
                     salary = Double.parseDouble(salaryField.getText());
+                    if (salary < 0) {
+                        showInfo("Salary must be a positive number.");
+                        return null;
+                    }
                 } catch (NumberFormatException ex) {
-                    showInfo("Invalid salary.");
+                    showInfo("Please enter a valid salary amount.");
                     return null;
                 }
-                return new Employee(idField.getText(), nameField.getText(), positionField.getText(), departmentField.getText(), salary);
+                
+                return new Employee(idField.getText().trim(), nameField.getText().trim(), 
+                                  positionField.getText().trim(), departmentCombo.getValue(), salary);
             }
             return null;
         });
@@ -181,6 +306,15 @@ public class EmployeeController implements Initializable {
         a.setHeaderText(null);
         a.setContentText(msg);
         a.showAndWait();
+    }
+
+    private void showSuccessAlert(String msg) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("Success");
+        alert.setHeaderText(null);
+        alert.setContentText(msg);
+        alert.getDialogPane().setStyle("-fx-background-color: #f5f5f5;");
+        alert.showAndWait();
     }
 }
 

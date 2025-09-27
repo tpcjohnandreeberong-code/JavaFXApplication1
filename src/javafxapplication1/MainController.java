@@ -51,10 +51,10 @@ public class MainController implements Initializable {
     @FXML private void onEditProfile() { info("Profile", "Open edit profile view."); }
     @FXML private void openDashboard() { if (defaultDashboardContent != null) contentScroll.setContent(defaultDashboardContent); }
     @FXML private void openEmployeeManagement() { setCenterContent("/javafxapplication1/Employee.fxml"); }
-    @FXML private void openPayrollProcessing() { info("Payroll Processing", "Open payroll processing view."); }
-    @FXML private void openPayrollGenerator() { info("Payroll Generator", "Open payroll generator view."); }
-    @FXML private void openReports() { info("Reports", "Open reports view."); }
-    @FXML private void openImportExport() { info("Import / Export", "Open import/export view."); }
+    @FXML private void openPayrollProcessing() { setCenterContent("/javafxapplication1/PayrollProcessing.fxml"); }
+    @FXML private void openPayrollGenerator() { setCenterContent("/javafxapplication1/PayrollGenerator.fxml"); }
+    @FXML private void openReports() { setCenterContent("/javafxapplication1/Reports.fxml"); }
+    @FXML private void openImportExport() { setCenterContent("/javafxapplication1/ImportExport.fxml"); }
     @FXML private void openHistory() { info("History", "Open history view."); }
     @FXML private void openSecurity() { info("Security Maintenance", "Open security maintenance view."); }
     @FXML private void openGovernmentRemittances() { info("Government Remittances", "Open remittances view."); }
