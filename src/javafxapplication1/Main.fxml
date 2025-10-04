@@ -63,6 +63,9 @@
 <Button fx:id="historyBtn" maxWidth="Infinity" onAction="#openHistory" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="History" />
 <Button fx:id="securityBtn" maxWidth="Infinity" onAction="#openSecurity" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="Security Maintenance" />
 <Button fx:id="govRemitBtn" maxWidth="Infinity" onAction="#openGovernmentRemittances" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="Government Remittances" />
+
+<Label style="-fx-text-fill: white; -fx-opacity: 0.8; -fx-padding: 8 16 0 16; -fx-font-size: 13px;" text="User Management" />
+<Button fx:id="userManagementBtn" maxWidth="Infinity" onAction="#openUserManagement" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="User Management" />
 <Button fx:id="userAccessBtn" maxWidth="Infinity" onAction="#openUserAccess" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="User Access" />
 </children>
 <padding>

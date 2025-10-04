@@ -45,6 +45,7 @@ public class MainController implements Initializable {
     @FXML private Button historyBtn;
     @FXML private Button securityBtn;
     @FXML private Button govRemitBtn;
+    @FXML private Button userManagementBtn;
     @FXML private Button userAccessBtn;
 
     @FXML private void onLogout() { info("Logout", "Implement logout navigation here."); }
@@ -55,10 +56,11 @@ public class MainController implements Initializable {
     @FXML private void openPayrollGenerator() { setCenterContent("/javafxapplication1/PayrollGenerator.fxml"); }
     @FXML private void openReports() { setCenterContent("/javafxapplication1/Reports.fxml"); }
     @FXML private void openImportExport() { setCenterContent("/javafxapplication1/ImportExport.fxml"); }
-    @FXML private void openHistory() { info("History", "Open history view."); }
-    @FXML private void openSecurity() { info("Security Maintenance", "Open security maintenance view."); }
-    @FXML private void openGovernmentRemittances() { info("Government Remittances", "Open remittances view."); }
-    @FXML private void openUserAccess() { info("User Access", "Open user access view."); }
+    @FXML private void openHistory() { setCenterContent("/javafxapplication1/History.fxml"); }
+    @FXML private void openSecurity() { setCenterContent("/javafxapplication1/SecurityMaintenance.fxml"); }
+    @FXML private void openGovernmentRemittances() { setCenterContent("/javafxapplication1/GovernmentRemittances.fxml"); }
+    @FXML private void openUserManagement() { setCenterContent("/javafxapplication1/UserManagement.fxml"); }
+    @FXML private void openUserAccess() { setCenterContent("/javafxapplication1/UserAccess.fxml"); }
 
     private void info(String title, String content) {
         Alert alert = new Alert(AlertType.INFORMATION);

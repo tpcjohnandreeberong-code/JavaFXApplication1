@@ -93,50 +93,6 @@
 </effect>
 </VBox>
 
-<!-- Summary Cards -->
-<HBox spacing="16.0" alignment="CENTER_LEFT">
-<children>
-<VBox alignment="CENTER" spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16; -fx-min-width: 150;">
-<children>
-<Label text="Total Imports" style="-fx-font-size: 12px; -fx-text-fill: #666;" />
-<Label fx:id="totalImportsLabel" text="0" style="-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-</children>
-<effect>
-<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
-</effect>
-</VBox>
-
-<VBox alignment="CENTER" spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16; -fx-min-width: 150;">
-<children>
-<Label text="Total Exports" style="-fx-font-size: 12px; -fx-text-fill: #666;" />
-<Label fx:id="totalExportsLabel" text="0" style="-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #1976d2;" />
-</children>
-<effect>
-<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
-</effect>
-</VBox>
-
-<VBox alignment="CENTER" spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16; -fx-min-width: 150;">
-<children>
-<Label text="Success Rate" style="-fx-font-size: 12px; -fx-text-fill: #666;" />
-<Label fx:id="successRateLabel" text="100%" style="-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #4caf50;" />
-</children>
-<effect>
-<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
-</effect>
-</VBox>
-
-<VBox alignment="CENTER" spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16; -fx-min-width: 150;">
-<children>
-<Label text="Last Activity" style="-fx-font-size: 12px; -fx-text-fill: #666;" />
-<Label fx:id="lastActivityLabel" text="Today" style="-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #f57c00;" />
-</children>
-<effect>
-<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
-</effect>
-</VBox>
-</children>
-</HBox>
 </children>
 <padding>
 <Insets top="16.0" right="16.0" bottom="16.0" left="16.0" />

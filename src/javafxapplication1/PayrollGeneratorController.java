@@ -83,10 +83,6 @@ public class PayrollGeneratorController implements Initializable {
     @FXML private TableColumn<PayrollEntry, Double> colNetPay;
     @FXML private TableColumn<PayrollEntry, String> colStatus;
     @FXML private TableColumn<PayrollEntry, String> colCreatedDate;
-    @FXML private Label totalEntriesLabel;
-    @FXML private Label pendingEntriesLabel;
-    @FXML private Label totalGrossLabel;
-    @FXML private Label totalNetLabel;
 
     private final ObservableList<PayrollEntry> payrollData = FXCollections.observableArrayList();
     private final ObservableList<String> statusOptions = FXCollections.observableArrayList();
@@ -96,7 +92,6 @@ public class PayrollGeneratorController implements Initializable {
         setupTableColumns();
         setupStatusFilter();
         loadSampleData();
-        updateSummary();
     }
 
     private void setupTableColumns() {
@@ -204,7 +199,6 @@ public class PayrollGeneratorController implements Initializable {
         
         if (searchText.isEmpty() && (selectedStatus == null || selectedStatus.equals("All Status")) && selectedPeriod == null) {
             payrollTable.setItems(payrollData);
-            updateSummary();
             return;
         }
 
@@ -224,7 +218,6 @@ public class PayrollGeneratorController implements Initializable {
             }
         }
         payrollTable.setItems(filtered);
-        updateSummary(filtered);
     }
 
     @FXML
@@ -234,7 +227,6 @@ public class PayrollGeneratorController implements Initializable {
         result.ifPresent(entry -> {
             payrollData.add(entry);
             showSuccessAlert("Payroll entry added successfully!");
-            updateSummary();
         });
     }
 
@@ -253,7 +245,6 @@ public class PayrollGeneratorController implements Initializable {
             if (idx >= 0) {
                 payrollData.set(idx, updated);
                 showSuccessAlert("Payroll entry updated successfully!");
-                updateSummary();
             }
         });
     }
@@ -274,7 +265,6 @@ public class PayrollGeneratorController implements Initializable {
         if (res.isPresent() && res.get() == ButtonType.OK) {
             payrollData.remove(selected);
             showSuccessAlert("Payroll entry deleted successfully!");
-            updateSummary();
         }
     }
 
@@ -496,21 +486,6 @@ public class PayrollGeneratorController implements Initializable {
         dialog.showAndWait();
     }
 
-    private void updateSummary() {
-        updateSummary(payrollTable.getItems());
-    }
-
-    private void updateSummary(ObservableList<PayrollEntry> entries) {
-        int totalEntries = entries.size();
-        int pendingEntries = (int) entries.stream().filter(e -> e.getStatus().equals("Pending") || e.getStatus().equals("Draft")).count();
-        double totalGross = entries.stream().mapToDouble(e -> e.getBasicSalary() + e.getOvertime() + e.getAllowances()).sum();
-        double totalNet = entries.stream().mapToDouble(PayrollEntry::getNetPay).sum();
-
-        totalEntriesLabel.setText(String.valueOf(totalEntries));
-        pendingEntriesLabel.setText(String.valueOf(pendingEntries));
-        totalGrossLabel.setText(String.format("₱%,.2f", totalGross));
-        totalNetLabel.setText(String.format("₱%,.2f", totalNet));
-    }
 
     private void showAlert(String message) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);

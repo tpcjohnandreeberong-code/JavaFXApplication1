@@ -77,10 +77,6 @@ public class PayrollProcessingController implements Initializable {
     @FXML private TableColumn<PayrollRecord, Double> colDeductions;
     @FXML private TableColumn<PayrollRecord, Double> colNetPay;
     @FXML private TableColumn<PayrollRecord, String> colStatus;
-    @FXML private Label totalEmployeesLabel;
-    @FXML private Label totalGrossLabel;
-    @FXML private Label totalDeductionsLabel;
-    @FXML private Label netPayrollLabel;
 
     private final ObservableList<PayrollRecord> payrollData = FXCollections.observableArrayList();
     private final ObservableList<String> departments = FXCollections.observableArrayList();
@@ -90,7 +86,6 @@ public class PayrollProcessingController implements Initializable {
         setupTableColumns();
         setupDepartmentFilter();
         loadSampleData();
-        updateSummary();
         
         // Set default date range (current month)
         LocalDate now = LocalDate.now();
@@ -212,7 +207,6 @@ public class PayrollProcessingController implements Initializable {
         
         if (searchText.isEmpty() && (selectedDept == null || selectedDept.equals("All Departments"))) {
             payrollTable.setItems(payrollData);
-            updateSummary();
             return;
         }
 
@@ -229,7 +223,6 @@ public class PayrollProcessingController implements Initializable {
             }
         }
         payrollTable.setItems(filtered);
-        updateSummary(filtered);
     }
 
     @FXML
@@ -357,21 +350,6 @@ public class PayrollProcessingController implements Initializable {
         dialog.showAndWait();
     }
 
-    private void updateSummary() {
-        updateSummary(payrollTable.getItems());
-    }
-
-    private void updateSummary(ObservableList<PayrollRecord> records) {
-        int totalEmployees = records.size();
-        double totalGross = records.stream().mapToDouble(r -> r.getBasicSalary() + r.getOvertime() + r.getAllowances()).sum();
-        double totalDeductions = records.stream().mapToDouble(PayrollRecord::getDeductions).sum();
-        double netPayroll = records.stream().mapToDouble(PayrollRecord::getNetPay).sum();
-
-        totalEmployeesLabel.setText(String.valueOf(totalEmployees));
-        totalGrossLabel.setText(String.format("₱%,.2f", totalGross));
-        totalDeductionsLabel.setText(String.format("₱%,.2f", totalDeductions));
-        netPayrollLabel.setText(String.format("₱%,.2f", netPayroll));
-    }
 
     private void showAlert(String message) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);

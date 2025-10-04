@@ -72,10 +72,6 @@ public class ImportExportController implements Initializable {
     @FXML private TableColumn<ImportPreviewData, String> colPreview3;
     @FXML private TableColumn<ImportPreviewData, String> colPreview4;
     @FXML private TableColumn<ImportPreviewData, String> colPreview5;
-    @FXML private Label totalImportsLabel;
-    @FXML private Label totalExportsLabel;
-    @FXML private Label successRateLabel;
-    @FXML private Label lastActivityLabel;
 
     private final ObservableList<String> dataTypes = FXCollections.observableArrayList();
     private final ObservableList<String> fileFormats = FXCollections.observableArrayList();
@@ -83,16 +79,12 @@ public class ImportExportController implements Initializable {
     private final ObservableList<ImportPreviewData> previewData = FXCollections.observableArrayList();
     
     private File selectedImportFile;
-    private int totalImports = 0;
-    private int totalExports = 0;
-    private int successfulOperations = 0;
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
         setupComboBoxes();
         setupTableColumns();
         loadSamplePreviewData();
-        updateStatistics();
     }
 
     private void setupComboBoxes() {
@@ -264,9 +256,6 @@ public class ImportExportController implements Initializable {
             @Override
             public void handle(WorkerStateEvent event) {
                 importProgressBar.setVisible(false);
-                totalImports++;
-                successfulOperations++;
-                updateStatistics();
                 showSuccessAlert("Import completed successfully!\n" + 
                                "Data Type: " + dataType + "\n" +
                                "Format: " + fileFormat + "\n" +
@@ -333,9 +322,6 @@ public class ImportExportController implements Initializable {
             public void handle(WorkerStateEvent event) {
                 exportProgressBar.setVisible(false);
                 exportStatusLabel.setText("Export completed successfully!");
-                totalExports++;
-                successfulOperations++;
-                updateStatistics();
                 
                 ExportResult result = exportTask.getValue();
                 showSuccessAlert("Export completed successfully!\n" + 
@@ -442,20 +428,6 @@ public class ImportExportController implements Initializable {
         dialog.showAndWait();
     }
 
-    private void updateStatistics() {
-        totalImportsLabel.setText(String.valueOf(totalImports));
-        totalExportsLabel.setText(String.valueOf(totalExports));
-        
-        int totalOperations = totalImports + totalExports;
-        if (totalOperations > 0) {
-            double successRate = (double) successfulOperations / totalOperations * 100;
-            successRateLabel.setText(String.format("%.1f%%", successRate));
-        } else {
-            successRateLabel.setText("100%");
-        }
-        
-        lastActivityLabel.setText(LocalDate.now().format(DateTimeFormatter.ofPattern("MMM dd")));
-    }
 
     private void showAlert(String message) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);

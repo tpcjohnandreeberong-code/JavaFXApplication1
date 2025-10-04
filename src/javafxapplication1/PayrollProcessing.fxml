@@ -49,10 +49,10 @@
 </HBox>
 
 <!-- Payroll Table -->
-<VBox spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;">
+<VBox spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;" VBox.vgrow="ALWAYS">
 <children>
 <Label text="Payroll Records" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
-<TableView fx:id="payrollTable" prefHeight="400.0" style="-fx-background-color: transparent;">
+<TableView fx:id="payrollTable" prefHeight="400.0" style="-fx-background-color: transparent;" VBox.vgrow="ALWAYS">
 <columns>
 <TableColumn fx:id="colEmployeeId" text="Employee ID" prefWidth="100.0" />
 <TableColumn fx:id="colEmployeeName" text="Employee Name" prefWidth="200.0" />
@@ -72,50 +72,6 @@
 </effect>
 </VBox>
 
-<!-- Summary Cards -->
-<HBox spacing="16.0" alignment="CENTER_LEFT">
-<children>
-<VBox alignment="CENTER" spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16; -fx-min-width: 150;">
-<children>
-<Label text="Total Employees" style="-fx-font-size: 12px; -fx-text-fill: #666;" />
-<Label fx:id="totalEmployeesLabel" text="0" style="-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-</children>
-<effect>
-<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
-</effect>
-</VBox>
-
-<VBox alignment="CENTER" spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16; -fx-min-width: 150;">
-<children>
-<Label text="Total Gross Pay" style="-fx-font-size: 12px; -fx-text-fill: #666;" />
-<Label fx:id="totalGrossLabel" text="₱0.00" style="-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #1976d2;" />
-</children>
-<effect>
-<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
-</effect>
-</VBox>
-
-<VBox alignment="CENTER" spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16; -fx-min-width: 150;">
-<children>
-<Label text="Total Deductions" style="-fx-font-size: 12px; -fx-text-fill: #666;" />
-<Label fx:id="totalDeductionsLabel" text="₱0.00" style="-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #d32f2f;" />
-</children>
-<effect>
-<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
-</effect>
-</VBox>
-
-<VBox alignment="CENTER" spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16; -fx-min-width: 150;">
-<children>
-<Label text="Net Payroll" style="-fx-font-size: 12px; -fx-text-fill: #666;" />
-<Label fx:id="netPayrollLabel" text="₱0.00" style="-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-</children>
-<effect>
-<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
-</effect>
-</VBox>
-</children>
-</HBox>
 </children>
 <padding>
 <Insets top="16.0" right="16.0" bottom="16.0" left="16.0" />
