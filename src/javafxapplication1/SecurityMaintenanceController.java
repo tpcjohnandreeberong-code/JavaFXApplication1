@@ -55,29 +55,14 @@ public class SecurityMaintenanceController implements Initializable {
     @FXML private TableColumn<SecurityEvent, String> colIPAddress;
     @FXML private TableColumn<SecurityEvent, String> colEventStatus;
 
-    // User Management Controls
-    @FXML private TextField userSearchField;
-    @FXML private ComboBox<String> roleFilter;
-    @FXML private ComboBox<String> statusFilter;
-    @FXML private TableView<UserAccount> userTable;
-    @FXML private TableColumn<UserAccount, String> colUsername;
-    @FXML private TableColumn<UserAccount, String> colFullName;
-    @FXML private TableColumn<UserAccount, String> colRole;
-    @FXML private TableColumn<UserAccount, String> colStatus;
-    @FXML private TableColumn<UserAccount, LocalDateTime> colLastLogin;
-    @FXML private TableColumn<UserAccount, Integer> colFailedAttempts;
-    @FXML private TableColumn<UserAccount, Boolean> colAccountLocked;
 
     // Tab Pane
     @FXML private TabPane securityTabPane;
 
     // Data Collections
     private final ObservableList<SecurityEvent> securityEvents = FXCollections.observableArrayList();
-    private final ObservableList<UserAccount> userAccounts = FXCollections.observableArrayList();
     private final ObservableList<String> eventTypes = FXCollections.observableArrayList();
     private final ObservableList<String> severityLevels = FXCollections.observableArrayList();
-    private final ObservableList<String> userRoles = FXCollections.observableArrayList();
-    private final ObservableList<String> userStatuses = FXCollections.observableArrayList();
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
@@ -100,16 +85,6 @@ public class SecurityMaintenanceController implements Initializable {
         colIPAddress.setCellValueFactory(new PropertyValueFactory<>("ipAddress"));
         colEventStatus.setCellValueFactory(new PropertyValueFactory<>("status"));
 
-        // User Account Table
-        colUsername.setCellValueFactory(new PropertyValueFactory<>("username"));
-        colFullName.setCellValueFactory(new PropertyValueFactory<>("fullName"));
-        colRole.setCellValueFactory(new PropertyValueFactory<>("role"));
-        colStatus.setCellValueFactory(new PropertyValueFactory<>("status"));
-        colLastLogin.setCellValueFactory(new PropertyValueFactory<>("lastLogin"));
-        DateTimeFormatter lastLoginFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-        colLastLogin.setCellFactory(TextFieldTableCell.forTableColumn(new LocalDateTimeStringConverter(lastLoginFormatter, lastLoginFormatter)));
-        colFailedAttempts.setCellValueFactory(new PropertyValueFactory<>("failedAttempts"));
-        colAccountLocked.setCellValueFactory(new PropertyValueFactory<>("accountLocked"));
     }
 
     private void setupComboBoxes() {
@@ -123,15 +98,6 @@ public class SecurityMaintenanceController implements Initializable {
         severityFilter.setItems(severityLevels);
         severityFilter.setValue("All Severity");
 
-        // User Roles
-        userRoles.addAll("All Roles", "Admin", "Manager", "HR", "Employee", "Guest");
-        roleFilter.setItems(userRoles);
-        roleFilter.setValue("All Roles");
-
-        // User Status
-        userStatuses.addAll("All Status", "Active", "Inactive", "Locked", "Suspended");
-        statusFilter.setItems(userStatuses);
-        statusFilter.setValue("All Status");
     }
 
     private void loadSampleData() {
@@ -148,18 +114,6 @@ public class SecurityMaintenanceController implements Initializable {
         );
         securityEventTable.setItems(securityEvents);
 
-        // Sample User Accounts
-        userAccounts.addAll(
-            new UserAccount("admin", "Administrator", "Admin", "Active", LocalDateTime.now().minusHours(1), 0, false),
-            new UserAccount("manager1", "John Manager", "Manager", "Active", LocalDateTime.now().minusHours(2), 0, false),
-            new UserAccount("hr1", "Jane HR", "HR", "Active", LocalDateTime.now().minusHours(3), 1, false),
-            new UserAccount("emp1", "Bob Employee", "Employee", "Active", LocalDateTime.now().minusHours(4), 0, false),
-            new UserAccount("user2", "Alice User", "Employee", "Locked", LocalDateTime.now().minusDays(1), 5, true),
-            new UserAccount("guest1", "Guest User", "Guest", "Inactive", LocalDateTime.now().minusDays(2), 0, false),
-            new UserAccount("emp2", "Charlie Worker", "Employee", "Active", LocalDateTime.now().minusHours(5), 2, false),
-            new UserAccount("hr2", "Diana HR", "HR", "Suspended", LocalDateTime.now().minusDays(3), 0, false)
-        );
-        userTable.setItems(userAccounts);
     }
 
     private void loadCurrentSettings() {
@@ -306,94 +260,9 @@ public class SecurityMaintenanceController implements Initializable {
         }
     }
 
-    // User Management Actions
-    @FXML
-    private void onSearchUsers() {
-        String searchText = userSearchField.getText() == null ? "" : userSearchField.getText().trim().toLowerCase();
-        String selectedRole = roleFilter.getValue();
-        String selectedStatus = statusFilter.getValue();
 
-        if (searchText.isEmpty() && 
-            (selectedRole == null || selectedRole.equals("All Roles")) &&
-            (selectedStatus == null || selectedStatus.equals("All Status"))) {
-            userTable.setItems(userAccounts);
-            return;
-        }
 
-        ObservableList<UserAccount> filtered = FXCollections.observableArrayList();
-        for (UserAccount user : userAccounts) {
-            boolean matchesSearch = searchText.isEmpty() ||
-                                  user.getUsername().toLowerCase().contains(searchText) ||
-                                  user.getFullName().toLowerCase().contains(searchText);
-            boolean matchesRole = selectedRole == null || selectedRole.equals("All Roles") ||
-                                user.getRole().equals(selectedRole);
-            boolean matchesStatus = selectedStatus == null || selectedStatus.equals("All Status") ||
-                                  user.getStatus().equals(selectedStatus);
 
-            if (matchesSearch && matchesRole && matchesStatus) {
-                filtered.add(user);
-            }
-        }
-        userTable.setItems(filtered);
-    }
-
-    @FXML
-    private void onAddUser() {
-        Dialog<UserAccount> dialog = buildUserDialog(null);
-        Optional<UserAccount> result = dialog.showAndWait();
-        result.ifPresent(user -> {
-            userAccounts.add(user);
-            showSuccessAlert("User account added successfully!");
-            logSecurityEvent("User Management", "Low", "admin", "New user account created: " + user.getUsername());
-        });
-    }
-
-    @FXML
-    private void onLockUser() {
-        UserAccount selected = userTable.getSelectionModel().getSelectedItem();
-        if (selected == null) {
-            showErrorAlert("Please select a user to lock!");
-            return;
-        }
-
-        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
-        confirm.setTitle("Lock User Account");
-        confirm.setHeaderText(null);
-        confirm.setContentText("Lock user account " + selected.getUsername() + "?");
-        Optional<ButtonType> result = confirm.showAndWait();
-        
-        if (result.isPresent() && result.get() == ButtonType.OK) {
-            selected.setStatus("Locked");
-            selected.setAccountLocked(true);
-            userTable.refresh();
-            showSuccessAlert("User account locked successfully!");
-            logSecurityEvent("User Management", "Medium", "admin", "User account locked: " + selected.getUsername());
-        }
-    }
-
-    @FXML
-    private void onUnlockUser() {
-        UserAccount selected = userTable.getSelectionModel().getSelectedItem();
-        if (selected == null) {
-            showErrorAlert("Please select a user to unlock!");
-            return;
-        }
-
-        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
-        confirm.setTitle("Unlock User Account");
-        confirm.setHeaderText(null);
-        confirm.setContentText("Unlock user account " + selected.getUsername() + "?");
-        Optional<ButtonType> result = confirm.showAndWait();
-        
-        if (result.isPresent() && result.get() == ButtonType.OK) {
-            selected.setStatus("Active");
-            selected.setAccountLocked(false);
-            selected.setFailedAttempts(0);
-            userTable.refresh();
-            showSuccessAlert("User account unlocked successfully!");
-            logSecurityEvent("User Management", "Low", "admin", "User account unlocked: " + selected.getUsername());
-        }
-    }
 
     // General Actions
     @FXML
@@ -446,66 +315,6 @@ public class SecurityMaintenanceController implements Initializable {
     }
 
     // Helper Methods
-    private Dialog<UserAccount> buildUserDialog(UserAccount user) {
-        Dialog<UserAccount> dialog = new Dialog<>();
-        dialog.setTitle(user == null ? "Add New User" : "Edit User");
-        dialog.setHeaderText(null);
-
-        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
-
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new javafx.geometry.Insets(20, 150, 10, 10));
-
-        TextField usernameField = new TextField();
-        usernameField.setPromptText("Username");
-        TextField fullNameField = new TextField();
-        fullNameField.setPromptText("Full Name");
-        ComboBox<String> roleCombo = new ComboBox<>();
-        roleCombo.getItems().addAll("Admin", "Manager", "HR", "Employee", "Guest");
-        ComboBox<String> statusCombo = new ComboBox<>();
-        statusCombo.getItems().addAll("Active", "Inactive", "Locked", "Suspended");
-
-        if (user != null) {
-            usernameField.setText(user.getUsername());
-            fullNameField.setText(user.getFullName());
-            roleCombo.setValue(user.getRole());
-            statusCombo.setValue(user.getStatus());
-        } else {
-            roleCombo.setValue("Employee");
-            statusCombo.setValue("Active");
-        }
-
-        grid.add(new Label("Username:"), 0, 0);
-        grid.add(usernameField, 1, 0);
-        grid.add(new Label("Full Name:"), 0, 1);
-        grid.add(fullNameField, 1, 1);
-        grid.add(new Label("Role:"), 0, 2);
-        grid.add(roleCombo, 1, 2);
-        grid.add(new Label("Status:"), 0, 3);
-        grid.add(statusCombo, 1, 3);
-
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == saveButtonType) {
-                return new UserAccount(
-                    usernameField.getText(),
-                    fullNameField.getText(),
-                    roleCombo.getValue(),
-                    statusCombo.getValue(),
-                    LocalDateTime.now(),
-                    0,
-                    false
-                );
-            }
-            return null;
-        });
-
-        return dialog;
-    }
 
     private void logSecurityEvent(String eventType, String severity, String user, String description) {
         Platform.runLater(() -> {
@@ -568,39 +377,4 @@ public class SecurityMaintenanceController implements Initializable {
         public String getStatus() { return status; }
     }
 
-    public static class UserAccount {
-        private String username;
-        private String fullName;
-        private String role;
-        private String status;
-        private LocalDateTime lastLogin;
-        private int failedAttempts;
-        private boolean accountLocked;
-
-        public UserAccount(String username, String fullName, String role, String status, LocalDateTime lastLogin, int failedAttempts, boolean accountLocked) {
-            this.username = username;
-            this.fullName = fullName;
-            this.role = role;
-            this.status = status;
-            this.lastLogin = lastLogin;
-            this.failedAttempts = failedAttempts;
-            this.accountLocked = accountLocked;
-        }
-
-        // Getters and Setters
-        public String getUsername() { return username; }
-        public void setUsername(String username) { this.username = username; }
-        public String getFullName() { return fullName; }
-        public void setFullName(String fullName) { this.fullName = fullName; }
-        public String getRole() { return role; }
-        public void setRole(String role) { this.role = role; }
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
-        public LocalDateTime getLastLogin() { return lastLogin; }
-        public void setLastLogin(LocalDateTime lastLogin) { this.lastLogin = lastLogin; }
-        public int getFailedAttempts() { return failedAttempts; }
-        public void setFailedAttempts(int failedAttempts) { this.failedAttempts = failedAttempts; }
-        public boolean isAccountLocked() { return accountLocked; }
-        public void setAccountLocked(boolean accountLocked) { this.accountLocked = accountLocked; }
-    }
 }

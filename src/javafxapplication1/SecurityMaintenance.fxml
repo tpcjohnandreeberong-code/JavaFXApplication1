@@ -187,46 +187,6 @@
 </content>
 </Tab>
 
-<!-- User Management Tab -->
-<Tab text="User Management">
-<content>
-<VBox spacing="16.0" VBox.vgrow="ALWAYS">
-<children>
-<Label style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" text="User Account Management" />
-<HBox spacing="8.0">
-<children>
-<TextField fx:id="userSearchField" promptText="Search users..." style="-fx-background-radius: 6;" />
-<ComboBox fx:id="roleFilter" prefWidth="150.0" promptText="All Roles" style="-fx-background-radius: 6;" />
-<ComboBox fx:id="statusFilter" prefWidth="120.0" promptText="All Status" style="-fx-background-radius: 6;" />
-<Button onAction="#onSearchUsers" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Search" />
-<Button onAction="#onAddUser" style="-fx-background-color: #4caf50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Add User" />
-<Button onAction="#onLockUser" style="-fx-background-color: #ff9800; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Lock User" />
-<Button onAction="#onUnlockUser" style="-fx-background-color: #2196f3; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Unlock User" />
-</children>
-</HBox>
-<VBox spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;" VBox.vgrow="ALWAYS">
-<children>
-<Label style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" text="User Accounts" />
-<TableView fx:id="userTable" prefHeight="400.0" style="-fx-background-color: transparent;" VBox.vgrow="ALWAYS">
-<columns>
-<TableColumn fx:id="colUsername" prefWidth="120.0" text="Username" />
-<TableColumn fx:id="colFullName" prefWidth="200.0" text="Full Name" />
-<TableColumn fx:id="colRole" prefWidth="100.0" text="Role" />
-<TableColumn fx:id="colStatus" prefWidth="100.0" text="Status" />
-<TableColumn fx:id="colLastLogin" prefWidth="150.0" text="Last Login" />
-<TableColumn fx:id="colFailedAttempts" prefWidth="120.0" text="Failed Attempts" />
-<TableColumn fx:id="colAccountLocked" prefWidth="100.0" text="Locked" />
-</columns>
-</TableView>
-</children>
-<effect>
-<DropShadow color="#00000020" offsetY="2.0" radius="4.0" />
-</effect>
-</VBox>
-</children>
-</VBox>
-</content>
-</Tab>
 </tabs>
 </TabPane>
 </children>

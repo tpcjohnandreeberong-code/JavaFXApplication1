@@ -49,7 +49,7 @@ public class MainController implements Initializable {
     @FXML private Button userAccessBtn;
 
     @FXML private void onLogout() { info("Logout", "Implement logout navigation here."); }
-    @FXML private void onEditProfile() { info("Profile", "Open edit profile view."); }
+    @FXML private void onEditProfile() { setCenterContent("/javafxapplication1/EditProfile.fxml"); }
     @FXML private void openDashboard() { if (defaultDashboardContent != null) contentScroll.setContent(defaultDashboardContent); }
     @FXML private void openEmployeeManagement() { setCenterContent("/javafxapplication1/Employee.fxml"); }
     @FXML private void openPayrollProcessing() { setCenterContent("/javafxapplication1/PayrollProcessing.fxml"); }

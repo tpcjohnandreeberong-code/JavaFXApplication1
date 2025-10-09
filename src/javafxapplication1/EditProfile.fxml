@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.effect.DropShadow?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="javafxapplication1.EditProfileController" spacing="20.0" style="-fx-background-color: #f5f5f5;">
+<children>
+<!-- Header Section -->
+<HBox alignment="CENTER_LEFT" spacing="10.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;">
+<children>
+<ImageView fitHeight="40.0" fitWidth="40.0" pickOnBounds="true" preserveRatio="true">
+<image>
+<Image url="@images/tpc.png" />
+</image>
+</ImageView>
+<Label text="Edit Profile" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
+</children>
+<effect>
+<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
+</effect>
+</HBox>
+
+<!-- Profile Information Section -->
+<VBox spacing="16.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 24;">
+<children>
+<Label text="Profile Information" style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
+<Separator style="-fx-background-color: #c8e6c9;" />
+
+<GridPane hgap="20.0" vgap="15.0">
+<columnConstraints>
+<ColumnConstraints hgrow="NEVER" minWidth="150.0" />
+<ColumnConstraints hgrow="ALWAYS" minWidth="300.0" />
+<ColumnConstraints hgrow="NEVER" minWidth="150.0" />
+<ColumnConstraints hgrow="ALWAYS" minWidth="300.0" />
+</columnConstraints>
+<rowConstraints>
+<RowConstraints minHeight="40.0" vgrow="NEVER" />
+<RowConstraints minHeight="40.0" vgrow="NEVER" />
+<RowConstraints minHeight="40.0" vgrow="NEVER" />
+</rowConstraints>
+<children>
+<!-- Full Name -->
+<Label text="Full Name:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-font-size: 14px;" GridPane.columnIndex="0" GridPane.rowIndex="0" />
+<TextField fx:id="fullNameField" promptText="Enter full name" style="-fx-background-radius: 6; -fx-border-radius: 6; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-padding: 8;" GridPane.columnIndex="1" GridPane.rowIndex="0" />
+
+<!-- Username -->
+<Label text="Username:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-font-size: 14px;" GridPane.columnIndex="2" GridPane.rowIndex="0" />
+<TextField fx:id="usernameField" promptText="Enter username" style="-fx-background-radius: 6; -fx-border-radius: 6; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-padding: 8;" GridPane.columnIndex="3" GridPane.rowIndex="0" />
+
+<!-- Email -->
+<Label text="Email:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-font-size: 14px;" GridPane.columnIndex="0" GridPane.rowIndex="1" />
+<TextField fx:id="emailField" promptText="Enter email address" style="-fx-background-radius: 6; -fx-border-radius: 6; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-padding: 8;" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+</children>
+</GridPane>
+
+<HBox alignment="CENTER_RIGHT" spacing="10.0">
+<children>
+<Button text="Cancel" onAction="#onCancel" style="-fx-background-color: #f5f5f5; -fx-text-fill: #666; -fx-border-color: #ddd; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 10 20; -fx-font-weight: bold;" />
+<Button text="Update Profile" onAction="#onUpdateProfile" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 10 20;" />
+</children>
+</HBox>
+</children>
+<effect>
+<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
+</effect>
+</VBox>
+
+<!-- Change Password Section -->
+<VBox spacing="16.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 24;">
+<children>
+<Label text="Change Password" style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
+<Separator style="-fx-background-color: #c8e6c9;" />
+
+<GridPane hgap="20.0" vgap="15.0">
+<columnConstraints>
+<ColumnConstraints hgrow="NEVER" minWidth="200.0" />
+<ColumnConstraints hgrow="ALWAYS" minWidth="300.0" />
+<ColumnConstraints hgrow="NEVER" minWidth="200.0" />
+<ColumnConstraints hgrow="ALWAYS" minWidth="300.0" />
+</columnConstraints>
+<rowConstraints>
+<RowConstraints minHeight="40.0" vgrow="NEVER" />
+<RowConstraints minHeight="40.0" vgrow="NEVER" />
+<RowConstraints minHeight="40.0" vgrow="NEVER" />
+</rowConstraints>
+<children>
+<!-- Current Password -->
+<Label text="Current Password:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-font-size: 14px;" GridPane.columnIndex="0" GridPane.rowIndex="0" />
+<PasswordField fx:id="currentPasswordField" promptText="Enter current password" style="-fx-background-radius: 6; -fx-border-radius: 6; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-padding: 8;" GridPane.columnIndex="1" GridPane.rowIndex="0" />
+
+<!-- New Password -->
+<Label text="New Password:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-font-size: 14px;" GridPane.columnIndex="2" GridPane.rowIndex="0" />
+<PasswordField fx:id="newPasswordField" promptText="Enter new password" style="-fx-background-radius: 6; -fx-border-radius: 6; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-padding: 8;" GridPane.columnIndex="3" GridPane.rowIndex="0" />
+
+<!-- Confirm Password -->
+<Label text="Confirm Password:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-font-size: 14px;" GridPane.columnIndex="0" GridPane.rowIndex="1" />
+<PasswordField fx:id="confirmPasswordField" promptText="Confirm new password" style="-fx-background-radius: 6; -fx-border-radius: 6; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-padding: 8;" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+
+<!-- Password Requirements -->
+<Label text="Password Requirements:" style="-fx-font-weight: bold; -fx-text-fill: #666; -fx-font-size: 12px;" GridPane.columnIndex="2" GridPane.rowIndex="1" />
+<Label text="• At least 8 characters\n• Mix of letters and numbers\n• Special characters allowed" style="-fx-text-fill: #666; -fx-font-size: 11px;" GridPane.columnIndex="3" GridPane.rowIndex="1" />
+</children>
+</GridPane>
+
+<HBox alignment="CENTER_RIGHT" spacing="10.0">
+<children>
+<Button text="Clear" onAction="#onClearPassword" style="-fx-background-color: #f5f5f5; -fx-text-fill: #666; -fx-border-color: #ddd; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 10 20; -fx-font-weight: bold;" />
+<Button text="Change Password" onAction="#onChangePassword" style="-fx-background-color: linear-gradient(to right, #1976d2, #42a5f5); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 10 20;" />
+</children>
+</HBox>
+</children>
+<effect>
+<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
+</effect>
+</VBox>
+
+</children>
+<padding>
+<Insets top="16.0" right="16.0" bottom="30.0" left="16.0" />
+</padding>
+</VBox>
