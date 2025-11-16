@@ -41,10 +41,10 @@
 <HBox spacing="8.0">
 <children>
 <TextField fx:id="roleSearchField" promptText="Search roles..." style="-fx-background-radius: 6;" />
-<Button onAction="#onSearchRoles" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Search" />
-<Button onAction="#onAddRole" style="-fx-background-color: #4caf50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Add Role" />
-<Button onAction="#onEditRole" style="-fx-background-color: #2196f3; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Edit Role" />
-<Button onAction="#onDeleteRole" style="-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Delete Role" />
+<Button fx:id="searchRoleButton" onAction="#onSearchRoles" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Search" />
+<Button fx:id="addRoleButton" onAction="#onAddRole" style="-fx-background-color: #4caf50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Add Role" />
+<Button fx:id="editRoleButton" onAction="#onEditRole" style="-fx-background-color: #2196f3; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Edit Role" />
+<Button fx:id="deleteRoleButton" onAction="#onDeleteRole" style="-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Delete Role" />
 </children>
 </HBox>
 <VBox spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;" VBox.vgrow="ALWAYS">
@@ -80,8 +80,11 @@
 <Label style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" text="Selected Role:" />
 <Label fx:id="selectedRoleLabel" style="-fx-font-weight: bold; -fx-text-fill: #1976d2;" text="None" />
 <Region HBox.hgrow="ALWAYS" />
-<Button onAction="#onSavePermissions" style="-fx-background-color: #4caf50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Save Permissions" />
-<Button onAction="#onResetPermissions" style="-fx-background-color: #ff9800; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Reset" />
+        <Button fx:id="addPermissionButton" onAction="#onAddPermission" style="-fx-background-color: #4caf50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Add Permission" />
+        <Button fx:id="updatePermissionButton" onAction="#onUpdatePermission" style="-fx-background-color: #2196f3; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Update Permission" />
+        <Button fx:id="deletePermissionButton" onAction="#onDeletePermission" style="-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Delete Permission" />
+        <Button fx:id="savePermissionsButton" onAction="#onSavePermissions" style="-fx-background-color: #4caf50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Save Permissions" />
+        <Button fx:id="resetPermissionsButton" onAction="#onResetPermissions" style="-fx-background-color: #ff9800; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Reset" />
 </children>
 </HBox>
 <VBox spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;" VBox.vgrow="ALWAYS">

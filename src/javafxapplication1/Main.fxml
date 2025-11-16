@@ -6,7 +6,6 @@
 <?import javafx.scene.control.MenuButton?>
 <?import javafx.scene.control.MenuItem?>
 <?import javafx.scene.control.ScrollPane?>
-<?import javafx.scene.control.Separator?>
 <?import javafx.scene.image.Image?>
 <?import javafx.scene.image.ImageView?>
 <?import javafx.scene.effect.DropShadow?>
@@ -33,7 +32,7 @@
 </ImageView>
 <Label style="-fx-text-fill: white; -fx-font-size: 20px; -fx-font-weight: bold; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.25), 6, 0.2, 0, 2);" text="TPC PAYROLL MANAGEMENT SYSTEM" />
 <Pane HBox.hgrow="ALWAYS" />
-<MenuButton style="-fx-background-color: rgba(255,255,255,0.2); -fx-text-fill: white; -fx-background-radius: 6; -fx-font-weight: bold; -fx-font-size: 14px;" text="Admin">
+<MenuButton fx:id="userMenuButton" style="-fx-background-color: rgba(255,255,255,0.2); -fx-text-fill: white; -fx-background-radius: 6; -fx-font-weight: bold; -fx-font-size: 16px;" text="Admin">
 <items>
 <MenuItem onAction="#onEditProfile" text="Edit Profile" />
 <MenuItem onAction="#onLogout" text="Logout" />
@@ -48,25 +47,17 @@
 <left>
 <VBox prefWidth="240.0" spacing="6.0" style="-fx-background-color: rgba(0,0,0,0.12);">
 <children>
-<Button fx:id="dashboardBtn" maxWidth="Infinity" onAction="#openDashboard" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 12 16 12 16; -fx-font-weight: bold; -fx-font-size: 15px;" text="Dashboard" />
-<Separator />
-<Label style="-fx-text-fill: white; -fx-opacity: 0.8; -fx-padding: 8 16 0 16; -fx-font-size: 13px;" text="Employee Management" />
-<Button fx:id="employeeMgmtBtn" maxWidth="Infinity" onAction="#openEmployeeManagement" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="Employees" />
-
-<Label style="-fx-text-fill: white; -fx-opacity: 0.8; -fx-padding: 8 16 0 16; -fx-font-size: 13px;" text="Payroll" />
-<Button fx:id="payrollProcessingBtn" maxWidth="Infinity" onAction="#openPayrollProcessing" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="Processing" />
-<Button fx:id="payrollGeneratorBtn" maxWidth="Infinity" onAction="#openPayrollGenerator" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="Generator" />
-<Button fx:id="reportsBtn" maxWidth="Infinity" onAction="#openReports" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="Reports" />
-<Button fx:id="importExportBtn" maxWidth="Infinity" onAction="#openImportExport" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="Import / Export" />
-
-<Label style="-fx-text-fill: white; -fx-opacity: 0.8; -fx-padding: 8 16 0 16; -fx-font-size: 13px;" text="System" />
-<Button fx:id="historyBtn" maxWidth="Infinity" onAction="#openHistory" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="History" />
-<Button fx:id="securityBtn" maxWidth="Infinity" onAction="#openSecurity" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="Security Maintenance" />
-<Button fx:id="govRemitBtn" maxWidth="Infinity" onAction="#openGovernmentRemittances" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="Government Remittances" />
-
-<Label style="-fx-text-fill: white; -fx-opacity: 0.8; -fx-padding: 8 16 0 16; -fx-font-size: 13px;" text="User Management" />
-<Button fx:id="userManagementBtn" maxWidth="Infinity" onAction="#openUserManagement" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="User Management" />
-<Button fx:id="userAccessBtn" maxWidth="Infinity" onAction="#openUserAccess" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 10 16 10 28; -fx-font-size: 14px;" text="User Access" />
+<Button fx:id="dashboardBtn" maxWidth="Infinity" onAction="#openDashboard" style="-fx-background-color: rgba(255,255,255,0.2); -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 5 16 5 16; -fx-font-weight: bold; -fx-font-size: 15px;" text="Dashboard" />
+<Button fx:id="employeeMgmtBtn" maxWidth="Infinity" onAction="#openEmployeeManagement" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 5 16 5 16; -fx-font-weight: bold; -fx-font-size: 15px;" text="Employees" />
+<Button fx:id="payrollProcessingBtn" maxWidth="Infinity" onAction="#openPayrollProcessing" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 5 16 5 16; -fx-font-weight: bold; -fx-font-size: 15px;" text="Processing" />
+<Button fx:id="payrollGeneratorBtn" maxWidth="Infinity" onAction="#openPayrollGenerator" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 5 16 5 16; -fx-font-weight: bold; -fx-font-size: 15px;" text="Generator" />
+<Button fx:id="reportsBtn" maxWidth="Infinity" onAction="#openReports" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 5 16 5 16; -fx-font-weight: bold; -fx-font-size: 15px;" text="Reports" />
+<Button fx:id="importExportBtn" maxWidth="Infinity" onAction="#openImportExport" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 5 16 5 16; -fx-font-weight: bold; -fx-font-size: 15px;" text="Import / Export" />
+<Button fx:id="historyBtn" maxWidth="Infinity" onAction="#openHistory" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 5 16 5 16; -fx-font-weight: bold; -fx-font-size: 15px;" text="History" />
+<Button fx:id="securityBtn" maxWidth="Infinity" onAction="#openSecurity" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 5 16 5 16; -fx-font-weight: bold; -fx-font-size: 15px;" text="Security Maintenance" />
+<Button fx:id="govRemitBtn" maxWidth="Infinity" onAction="#openGovernmentRemittances" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 5 16 5 16; -fx-font-weight: bold; -fx-font-size: 15px;" text="Government Remittances" />
+<Button fx:id="userManagementBtn" maxWidth="Infinity" onAction="#openUserManagement" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 5 16 5 16; -fx-font-weight: bold; -fx-font-size: 15px;" text="User Management" />
+<Button fx:id="userAccessBtn" maxWidth="Infinity" onAction="#openUserAccess" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-alignment: CENTER_LEFT; -fx-padding: 5 16 5 16; -fx-font-weight: bold; -fx-font-size: 15px;" text="User Access" />
 </children>
 <padding>
 <Insets bottom="16.0" left="6.0" right="6.0" top="16.0" />
@@ -83,7 +74,7 @@
 <children>
 <Label text="Dashboard Overview" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
 <Region HBox.hgrow="ALWAYS" />
-<Label text="Welcome to TPC Payroll Management System" style="-fx-text-fill: #666; -fx-font-size: 14px;" />
+<Label text="Welcome to TPC Payroll Management System" style="-fx-text-fill: #666; -fx-font-size: 18px;" />
 </children>
 <effect>
 <DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
