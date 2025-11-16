@@ -71,9 +71,13 @@ public class MainController implements Initializable {
     private Button currentActiveButton;
     
     // Database connection
-    private static final String DB_URL = "jdbc:mysql://127.0.0.1:3306/payroll";
-    private static final String DB_USER = "tpc_user";
-    private static final String DB_PASSWORD = "tpcuser123!";
+    private static final String DB_URL = "jdbc:mysql://127.0.0.1:3307/payroll";
+    private static final String DB_USER = "root";
+    private static final String DB_PASSWORD = "berong123!";
+    
+//    private static final String DB_URL = "jdbc:mysql://127.0.0.1:3306/payroll";
+//    private static final String DB_USER = "tpc_user";
+//    private static final String DB_PASSWORD = "tpcuser123!";
     private Connection connection;
     private static final Logger logger = Logger.getLogger(MainController.class.getName());
 

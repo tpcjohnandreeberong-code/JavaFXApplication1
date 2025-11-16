@@ -17,9 +17,9 @@ public class DatabaseAuthService {
     private Connection connection;
     
     // Database connection parameters
-    private static final String DB_URL = "jdbc:mysql://127.0.0.1:3306/payroll";
-    private static final String DB_USER = "tpc_user";
-    private static final String DB_PASSWORD = "tpcuser123!";
+    private static final String DB_URL = "jdbc:mysql://127.0.0.1:3307/payroll";
+    private static final String DB_USER = "root";
+    private static final String DB_PASSWORD = "berong123!";
     
     public DatabaseAuthService() {
         try {
