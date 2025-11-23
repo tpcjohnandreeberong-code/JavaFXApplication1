@@ -18,10 +18,9 @@
 <!-- Header Section -->
 <HBox alignment="CENTER_LEFT" spacing="10.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;">
 <children>
-<Label text="Import/Export Manager" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
+<Label text="Attendance Log Manager" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
 <Region HBox.hgrow="ALWAYS" />
-<Button text="Import Data" onAction="#onImportData" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" />
-<Button text="Export Data" onAction="#onExportData" style="-fx-background-color: linear-gradient(to right, #1976d2, #42a5f5); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" />
+<Button text="Import Attendance Log" onAction="#onImportData" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" />
 </children>
 <effect>
 <DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
@@ -31,60 +30,64 @@
 <!-- Import Section -->
 <VBox spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;">
 <children>
-<Label text="Import Data" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
+<Label text="Import Attendance Log" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
 <HBox alignment="CENTER_LEFT" spacing="10.0">
 <children>
-<Label text="Data Type:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-<ComboBox fx:id="importDataType" promptText="Select Data Type" prefWidth="150.0" style="-fx-background-radius: 6;" />
 <Label text="File Format:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-<ComboBox fx:id="importFileFormat" promptText="Select Format" prefWidth="120.0" style="-fx-background-radius: 6;" />
+<ComboBox fx:id="importFileFormat" promptText="Select Format" prefWidth="150.0" style="-fx-background-radius: 6;" />
 <Button text="Browse File" onAction="#onBrowseImportFile" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
 <Button text="Preview Data" onAction="#onPreviewImportData" style="-fx-background-color: #f57c00; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
 <Button text="Import Now" onAction="#onImportNow" style="-fx-background-color: #2e7d32; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
 </children>
 </HBox>
-<Label fx:id="importFileLabel" text="No file selected" style="-fx-text-fill: #666; -fx-font-style: italic;" />
+<Label fx:id="importFileLabel" text="No attendance log file selected" style="-fx-text-fill: #666; -fx-font-style: italic;" />
 <ProgressBar fx:id="importProgressBar" visible="false" prefWidth="400.0" style="-fx-background-radius: 6;" />
+<!-- File Loading Progress -->
+<VBox fx:id="fileLoadingSection" spacing="8.0" visible="false" managed="false" style="-fx-alignment: center; -fx-padding: 10;">
+<children>
+<Label fx:id="fileLoadingLabel" text="Processing attendance file..." style="-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
+<!-- <ProgressBar fx:id="fileProgressBar" prefWidth="400.0" progress="0.0" style="-fx-accent: #4caf50;" /> -->
+<Label fx:id="fileProgressLabel" text="Reading file..." style="-fx-font-size: 12px; -fx-text-fill: #666;" />
+</children>
+</VBox>
 </children>
 <effect>
 <DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
 </effect>
 </VBox>
 
-<!-- Export Section -->
-<VBox spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;">
-<children>
-<Label text="Export Data" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
-<HBox alignment="CENTER_LEFT" spacing="10.0">
-<children>
-<Label text="Data Type:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-<ComboBox fx:id="exportDataType" promptText="Select Data Type" prefWidth="150.0" style="-fx-background-radius: 6;" />
-<Label text="File Format:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-<ComboBox fx:id="exportFileFormat" promptText="Select Format" prefWidth="120.0" style="-fx-background-radius: 6;" />
-<Label text="Department:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-<ComboBox fx:id="exportDepartmentFilter" promptText="All Departments" prefWidth="150.0" style="-fx-background-radius: 6;" />
-<Button text="Export Now" onAction="#onExportNow" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
-</children>
-</HBox>
-<Label fx:id="exportStatusLabel" text="Ready to export" style="-fx-text-fill: #666; -fx-font-style: italic;" />
-<ProgressBar fx:id="exportProgressBar" visible="false" prefWidth="400.0" style="-fx-background-radius: 6;" />
-</children>
-<effect>
-<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
-</effect>
-</VBox>
 
-<!-- Import Preview Table -->
+<!-- Attendance Log Preview Table -->
 <VBox spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;" VBox.vgrow="ALWAYS">
 <children>
-<Label text="Import Preview" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
-<TableView fx:id="importPreviewTable" prefHeight="200.0" style="-fx-background-color: transparent;" VBox.vgrow="ALWAYS">
+<HBox alignment="CENTER_LEFT" spacing="10.0">
+<children>
+<Label text="Attendance Log Preview" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
+<Region HBox.hgrow="ALWAYS" />
+<Button text="Refresh Data" onAction="#onRefreshPreview" style="-fx-background-color: #4caf50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 6 12;" />
+<Button text="Show Statistics" onAction="#onShowStatistics" style="-fx-background-color: #ff9800; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 6 12;" />
+</children>
+</HBox>
+<!-- Search/Filter Section -->
+<HBox alignment="CENTER_LEFT" spacing="10.0" style="-fx-padding: 8; -fx-background-color: #f5f5f5; -fx-background-radius: 6;">
+<children>
+<Label text="Search:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
+<TextField fx:id="searchField" promptText="Search by Name or Account Number..." prefWidth="200.0" style="-fx-background-radius: 6;" onKeyReleased="#onSearchKeyReleased" />
+<Label text="Filter by Log Type:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
+<ComboBox fx:id="logTypeFilter" promptText="All Log Types" prefWidth="150.0" style="-fx-background-radius: 6;" onAction="#onFilterChanged" />
+<Label text="Date:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
+<TextField fx:id="dateFilter" promptText="YYYY-MM-DD" prefWidth="120.0" style="-fx-background-radius: 6;" onKeyReleased="#onSearchKeyReleased" />
+<Button text="Clear Filters" onAction="#onClearFilters" style="-fx-background-color: #757575; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 4 8;" />
+</children>
+</HBox>
+<TableView fx:id="importPreviewTable" prefHeight="300.0" style="-fx-background-color: transparent;" VBox.vgrow="ALWAYS">
 <columns>
-<TableColumn fx:id="colPreview1" text="Employee ID" prefWidth="120.0" />
-<TableColumn fx:id="colPreview2" text="Name" prefWidth="200.0" />
-<TableColumn fx:id="colPreview3" text="Department" prefWidth="150.0" />
-<TableColumn fx:id="colPreview4" text="Position" prefWidth="150.0" />
-<TableColumn fx:id="colPreview5" text="Salary" prefWidth="120.0" />
+<TableColumn fx:id="colPreview1" text="Fullname" prefWidth="200.0" />
+<TableColumn fx:id="colPreview2" text="Account Number" prefWidth="120.0" />
+<TableColumn fx:id="colPreview3" text="Date &amp; Time" prefWidth="160.0" />
+<TableColumn fx:id="colPreview4" text="Log Type" prefWidth="120.0" />
+<TableColumn fx:id="colPreview5" text="Raw Data" prefWidth="300.0" />
+<TableColumn fx:id="colPreview6" text="Status" prefWidth="150.0" />
 </columns>
 </TableView>
 </children>

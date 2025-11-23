@@ -1,7 +1,6 @@
 package javafxapplication1;
 
 import java.sql.*;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -14,12 +13,12 @@ import java.util.logging.Logger;
 public class DatabaseAuthService {
     
     private static final Logger logger = Logger.getLogger(DatabaseAuthService.class.getName());
-    private Connection connection;
+    Connection connection;
     
-    // Database connection parameters
-    private static final String DB_URL = "jdbc:mysql://127.0.0.1:3307/payroll";
-    private static final String DB_USER = "root";
-    private static final String DB_PASSWORD = "berong123!";
+    // Database connection parameters - now centralized
+    private static final String DB_URL = DatabaseConfig.getDbUrl();
+    private static final String DB_USER = DatabaseConfig.getDbUser();
+    private static final String DB_PASSWORD = DatabaseConfig.getDbPassword();
     
     public DatabaseAuthService() {
         try {
@@ -72,24 +71,39 @@ public class DatabaseAuthService {
             String status = userRs.getString("status");
             
             // Static admin login bypass - only for admin user
-            if (username.equalsIgnoreCase("admin")) {
-                // Admin login - skip password verification
-                logger.info("Admin login detected - bypassing password verification");
-            } else {
-                // Verify password for all other users (including staff)
-                logger.info("Verifying password for user: " + username);
-                logger.info("Input password: " + password);
-                logger.info("Stored hash from DB: " + storedHash);
+            // if (username.equalsIgnoreCase("admin")) {
+            //     // Admin login - skip password verification
+            //     logger.info("Admin login detected - bypassing password verification");
+            // } else {
+            //     // Verify password for all other users (including staff)
+            //     logger.info("Verifying password for user: " + username);
+            //     logger.info("Input password: " + password);
+            //     logger.info("Stored hash from DB: " + storedHash);
                 
-                boolean passwordMatch = verifyPassword(password, storedHash);
-                logger.info("Password verification result: " + (passwordMatch ? "SUCCESS" : "FAILED"));
+            //     boolean passwordMatch = verifyPassword(password, storedHash);
+            //     logger.info("Password verification result: " + (passwordMatch ? "SUCCESS" : "FAILED"));
                 
-                if (!passwordMatch) {
-                    // Password incorrect
-                    result.setSuccess(false);
-                    result.setMessage("Incorrect password. Please try again.");
-                    return result;
-                }
+            //     if (!passwordMatch) {
+            //         // Password incorrect 
+            //         result.setSuccess(false);
+            //         result.setMessage("Incorrect password. Please try again.");
+            //         return result;
+            //     }
+            // }
+
+
+            logger.info("Verifying password for user: " + username);
+            logger.info("Input password: " + password);
+            logger.info("Stored hash from DB: " + storedHash);
+                
+            boolean passwordMatch = verifyPassword(password, storedHash);
+            logger.info("Password verification result: " + (passwordMatch ? "SUCCESS" : "FAILED"));
+            
+            if (!passwordMatch) {
+                // Password incorrect
+                result.setSuccess(false);
+                result.setMessage("Incorrect password. Please try again.");
+                return result;
             }
             
             // Login successful

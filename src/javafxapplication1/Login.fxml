@@ -46,8 +46,12 @@
 <TextField fx:id="usernameField" maxWidth="Infinity" promptText="Username or Email" style="-fx-background-radius: 8; -fx-border-radius: 8; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-faint-focus-color: #a5d6a7;" />
 <HBox alignment="CENTER_LEFT" spacing="5.0">
 <children>
-      <PasswordField fx:id="passwordField" promptText="Password" style="-fx-background-radius: 8; -fx-border-radius: 8; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-faint-focus-color: #a5d6a7;" HBox.hgrow="ALWAYS" />
-<TextField fx:id="passwordVisibleField" promptText="Password" style="-fx-background-radius: 8; -fx-border-radius: 8; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-faint-focus-color: #a5d6a7;" visible="false" HBox.hgrow="ALWAYS" />
+<StackPane HBox.hgrow="ALWAYS">
+<children>
+<PasswordField fx:id="passwordField" promptText="Password" style="-fx-background-radius: 8; -fx-border-radius: 8; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-faint-focus-color: #a5d6a7;" />
+<TextField fx:id="passwordVisibleField" promptText="Password" style="-fx-background-radius: 8; -fx-border-radius: 8; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-faint-focus-color: #a5d6a7;" visible="false" />
+</children>
+</StackPane>
 <Button fx:id="showPasswordButton" maxHeight="Infinity" minHeight="40.0" minWidth="40.0" onAction="#onTogglePasswordVisibility" style="-fx-background-color: #f5f5f5; -fx-border-color: #c8e6c9; -fx-border-radius: 8; -fx-background-radius: 8; -fx-text-fill: #666;" text="👁" />
 </children>
 </HBox>

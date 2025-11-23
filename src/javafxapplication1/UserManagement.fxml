@@ -76,14 +76,14 @@
 <Label style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" text="System Users" />
 <TableView fx:id="userTable" prefHeight="400.0" style="-fx-background-color: transparent;" VBox.vgrow="ALWAYS">
 <columns>
-<TableColumn fx:id="colUserId" prefWidth="60.0" text="ID" />
-<TableColumn fx:id="colUsername" prefWidth="120.0" text="Username" />
-<TableColumn fx:id="colFullName" prefWidth="200.0" text="Full Name" />
-<TableColumn fx:id="colEmail" prefWidth="200.0" text="Email" />
-<TableColumn fx:id="colUserRole" prefWidth="120.0" text="Role" />
-<TableColumn fx:id="colUserStatus" prefWidth="100.0" text="Status" />
-<TableColumn fx:id="colLastLogin" prefWidth="120.0" text="Last Login" />
-<TableColumn fx:id="colCreatedDate" prefWidth="120.0" text="Created" />
+<TableColumn fx:id="colUserId" minWidth="50.0" prefWidth="60.0" text="ID" />
+<TableColumn fx:id="colUsername" minWidth="100.0" prefWidth="150.0" text="Username" />
+<TableColumn fx:id="colFullName" minWidth="120.0" prefWidth="200.0" text="Full Name" />
+<TableColumn fx:id="colEmail" minWidth="150.0" prefWidth="250.0" text="Email" />
+<TableColumn fx:id="colUserRole" minWidth="80.0" prefWidth="120.0" text="Role" />
+<TableColumn fx:id="colUserStatus" minWidth="70.0" prefWidth="100.0" text="Status" />
+<TableColumn fx:id="colLastLogin" minWidth="120.0" prefWidth="160.0" text="Last Login" />
+<TableColumn fx:id="colCreatedDate" minWidth="100.0" prefWidth="140.0" text="Created" />
 </columns>
 </TableView>
 </children>

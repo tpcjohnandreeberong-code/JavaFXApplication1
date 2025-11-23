@@ -49,6 +49,14 @@ public class SessionManager {
     }
     
     /**
+     * Set current user (for username updates)
+     */
+    public void setCurrentUser(String username) {
+        currentUser = username;
+        sessionData.put("username", username);
+    }
+    
+    /**
      * Get session data
      */
     public Object getSessionData(String key) {

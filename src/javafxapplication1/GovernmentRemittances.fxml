@@ -19,11 +19,9 @@
 <children>
 <HBox alignment="CENTER_LEFT" spacing="16.0">
 <children>
-<Label style="-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" text="Government Remittances" />
+<Label style="-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" text="Dedcutions" />
 <Region HBox.hgrow="ALWAYS" />
 <Button onAction="#onRefresh" style="-fx-background-color: #4caf50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Refresh" />
-<Button onAction="#onGenerateReport" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Generate Report" />
-<Button onAction="#onExportRemittances" style="-fx-background-color: #ff9800; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Export Data" />
 </children>
 </HBox>
 </children>

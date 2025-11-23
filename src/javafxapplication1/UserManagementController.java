@@ -23,14 +23,15 @@ public class UserManagementController implements Initializable {
     private static final Logger logger = Logger.getLogger(UserManagementController.class.getName());
     
     // Database connection parameters
-    // private static final String DB_URL = "jdbc:mysql://127.0.0.1:3306/payroll";
-    // private static final String DB_USER = "tpc_user";
-    // private static final String DB_PASSWORD = "tpcuser123!";
 
-    private static final String DB_URL = "jdbc:mysql://127.0.0.1:3307/payroll";
-    private static final String DB_USER = "root";
-    private static final String DB_PASSWORD = "berong123!";
+    private static final String DB_URL = DatabaseConfig.getDbUrl();
+    private static final String DB_USER = DatabaseConfig.getDbUser();
+    private static final String DB_PASSWORD = DatabaseConfig.getDbPassword();
+
+    
     private Connection connection;
+    
+    // Note: Using SecurityLogger static class for security event logging
 
     // FXML Controls
     @FXML private TextField userSearchField;
@@ -90,6 +91,9 @@ public class UserManagementController implements Initializable {
         colUserStatus.setCellValueFactory(new PropertyValueFactory<>("status"));
         colLastLogin.setCellValueFactory(new PropertyValueFactory<>("lastLogin"));
         colCreatedDate.setCellValueFactory(new PropertyValueFactory<>("createdDate"));
+        
+        // Set column resize policy to auto-fit the table width
+        userTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
     }
 
     private void setupComboBoxes() {
@@ -371,6 +375,14 @@ public class UserManagementController implements Initializable {
         Optional<SystemUser> result = dialog.showAndWait();
         result.ifPresent(user -> {
             if (addUserToDatabase(user)) {
+                // Log user creation event
+                SecurityLogger.logSecurityEvent(
+                    "USER_CREATED",
+                    "MEDIUM",
+                    SessionManager.getInstance().getCurrentUser(),
+                    "New user account created: " + user.getUsername() + " (" + user.getFullName() + ") - Role: " + user.getRole() + " from " + SecurityLogger.getClientIP()
+                );
+                
                 loadUsersFromDatabase(); // Refresh the table
                 showInfo("Success", "User added successfully: " + user.getFullName());
             }
@@ -388,6 +400,14 @@ public class UserManagementController implements Initializable {
         Optional<SystemUser> result = dialog.showAndWait();
         result.ifPresent(user -> {
             if (updateUserInDatabase(user)) {
+                // Log user update event
+                SecurityLogger.logSecurityEvent(
+                    "USER_UPDATED",
+                    "LOW",
+                    SessionManager.getInstance().getCurrentUser(),
+                    "User account updated: " + user.getUsername() + " (" + user.getFullName() + ") - Role: " + user.getRole() + " from " + SecurityLogger.getClientIP()
+                );
+                
                 loadUsersFromDatabase(); // Refresh the table
                 showInfo("Success", "User updated successfully: " + user.getFullName());
             }
@@ -444,16 +464,33 @@ public class UserManagementController implements Initializable {
             return;
         }
 
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("Reset Password");
-        alert.setHeaderText("Reset password for user: " + selectedUser.getFullName());
-        alert.setContentText("This will generate a temporary password for the user.\nContinue?");
+        Alert confirmAlert = new Alert(Alert.AlertType.CONFIRMATION);
+        confirmAlert.setTitle("Reset Password");
+        confirmAlert.setHeaderText("Reset password for user: " + selectedUser.getFullName());
+        confirmAlert.setContentText("This will generate a temporary password for the user.\nContinue?");
 
-        alert.showAndWait().ifPresent(response -> {
+        confirmAlert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
-                // Generate temporary password (in real app, this would be sent via email)
+                // Generate temporary password
                 String tempPassword = generateTempPassword();
-                showInfo("Password Reset", "Temporary password generated: " + tempPassword + "\nPlease share this with the user securely.");
+                
+                // Update password in database
+                if (updateUserPasswordInDatabase(selectedUser.getId(), tempPassword)) {
+                    // Log password reset event
+                    SecurityLogger.logSecurityEvent(
+                        "PASSWORD_RESET",
+                        "MEDIUM",
+                        SessionManager.getInstance().getCurrentUser(),
+                        "Password reset for user: " + selectedUser.getUsername() + " (" + selectedUser.getFullName() + ") - Temporary password generated from " + SecurityLogger.getClientIP()
+                    );
+                    
+                    // Show custom dialog with copy button
+                    showPasswordResetDialog(selectedUser.getFullName(), tempPassword);
+                    loadUsersFromDatabase(); // Refresh table
+                    logger.info("Password reset for user: " + selectedUser.getUsername() + " - New password: " + tempPassword);
+                } else {
+                    showError("Reset Failed", "Failed to reset password. Please try again.");
+                }
             }
         });
     }
@@ -624,6 +661,24 @@ public class UserManagementController implements Initializable {
         }
     }
     
+    private boolean updateUserPasswordInDatabase(int userId, String newPassword) {
+        try {
+            String hashedPassword = hashPassword(newPassword);
+            String query = "UPDATE users SET password_hash = ? WHERE user_id = ?";
+            PreparedStatement stmt = connection.prepareStatement(query);
+            stmt.setString(1, hashedPassword);
+            stmt.setInt(2, userId);
+            
+            int rowsAffected = stmt.executeUpdate();
+            return rowsAffected > 0;
+            
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error updating user password in database", e);
+            showError("Database Error", "Failed to update user password: " + e.getMessage());
+            return false;
+        }
+    }
+    
     private String hashPassword(String password) {
         // Create a secure hash using SHA-256 with salt
         try {
@@ -700,54 +755,174 @@ public class UserManagementController implements Initializable {
     private Dialog<SystemUser> buildUserDialog(SystemUser user) {
         Dialog<SystemUser> dialog = new Dialog<>();
         dialog.setTitle(user == null ? "Add User" : "Edit User");
-        dialog.setHeaderText(user == null ? "Create a new system user" : "Edit user information");
-
+        
+        // Remove default header
+        dialog.setHeaderText(null);
+        
+        // Custom button types with styled appearance
         ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
 
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new javafx.geometry.Insets(20, 150, 10, 10));
+        // Create main container with green gradient background
+        javafx.scene.layout.VBox mainContainer = new javafx.scene.layout.VBox();
+        mainContainer.setStyle("-fx-background-color: linear-gradient(to bottom right, #2e7d32, #66bb6a); -fx-padding: 0;");
+        
+        // Create content container with white background
+        javafx.scene.layout.VBox contentContainer = new javafx.scene.layout.VBox();
+        contentContainer.setStyle("-fx-background-color: white;");
+        contentContainer.setPadding(new javafx.geometry.Insets(40, 40, 40, 40));
+        contentContainer.setSpacing(20);
+        
+        // Title Label
+        Label titleLabel = new Label(user == null ? "Add New User" : "Edit User");
+        titleLabel.setStyle(
+            "-fx-text-fill: #1b5e20; " +
+            "-fx-font-size: 24px; " +
+            "-fx-font-weight: bold; " +
+            "-fx-alignment: center;"
+        );
+        
+        // Subtitle Label
+        // Label subtitleLabel = new Label(user == null ? "Create a new system user account" : "Update user information");
+        // subtitleLabel.setStyle(
+        //     "-fx-text-fill: #666666; " +
+        //     "-fx-font-size: 14px; " +
+        //     "-fx-alignment: center;"
+        // );
+        
+        // Form fields container
+        javafx.scene.layout.VBox formContainer = new javafx.scene.layout.VBox();
+        formContainer.setSpacing(18);
+        
+        // Styled input fields
+        String fieldStyle = 
+            "-fx-background-radius: 8; " +
+            "-fx-border-radius: 8; " +
+            "-fx-border-color: #c8e6c9; " +
+            "-fx-border-width: 1; " +
+            "-fx-focus-color: #66bb6a; " +
+            "-fx-faint-focus-color: transparent; " +
+            "-fx-padding: 6 10 6 10; " +
+            "-fx-font-size: 14px; " +
+            "-fx-pref-width: 350;";
+            
+        String labelStyle = 
+            "-fx-text-fill: #1b5e20; " +
+            "-fx-font-size: 14px; " +
+            "-fx-font-weight: bold;";
 
+        // Username field
+        javafx.scene.layout.VBox usernameContainer = new javafx.scene.layout.VBox(8);
+        Label usernameLabel = new Label("Username");
+        usernameLabel.setStyle(labelStyle);
         TextField usernameField = new TextField();
-        usernameField.setPromptText("Username");
+        usernameField.setPromptText("Enter username");
+        usernameField.setStyle(fieldStyle);
+        usernameContainer.getChildren().addAll(usernameLabel, usernameField);
+        
+        // Full Name field
+        javafx.scene.layout.VBox fullNameContainer = new javafx.scene.layout.VBox(8);
+        Label fullNameLabel = new Label("Full Name");
+        fullNameLabel.setStyle(labelStyle);
         TextField fullNameField = new TextField();
-        fullNameField.setPromptText("Full Name");
+        fullNameField.setPromptText("Enter full name");
+        fullNameField.setStyle(fieldStyle);
+        fullNameContainer.getChildren().addAll(fullNameLabel, fullNameField);
+        
+        // Email field
+        javafx.scene.layout.VBox emailContainer = new javafx.scene.layout.VBox(8);
+        Label emailLabel = new Label("Email Address");
+        emailLabel.setStyle(labelStyle);
         TextField emailField = new TextField();
-        emailField.setPromptText("Email");
+        emailField.setPromptText("Enter email address");
+        emailField.setStyle(fieldStyle);
+        emailContainer.getChildren().addAll(emailLabel, emailField);
+        
+        // Password field (only for new users)
+        javafx.scene.layout.VBox passwordContainer = new javafx.scene.layout.VBox(8);
+        Label passwordLabel = new Label("Password");
+        passwordLabel.setStyle(labelStyle);
         TextField passwordField = new TextField();
-        passwordField.setPromptText("Password");
+        passwordField.setPromptText(user == null ? "Enter password" : "Leave blank to keep current password");
+        passwordField.setStyle(fieldStyle);
+        passwordContainer.getChildren().addAll(passwordLabel, passwordField);
+        
+        // Role and Status in horizontal layout
+        javafx.scene.layout.HBox roleStatusContainer = new javafx.scene.layout.HBox(20);
+        
+        // Role field
+        javafx.scene.layout.VBox roleContainer = new javafx.scene.layout.VBox(8);
+        Label roleLabel = new Label("Role");
+        roleLabel.setStyle(labelStyle);
         ComboBox<String> roleCombo = new ComboBox<>();
         roleCombo.getItems().addAll("Admin", "Payroll Maker", "Staff");
         roleCombo.setValue("Staff");
+        roleCombo.setStyle(fieldStyle + "-fx-pref-width: 165;");
+        roleContainer.getChildren().addAll(roleLabel, roleCombo);
+        
+        // Status field
+        javafx.scene.layout.VBox statusContainer = new javafx.scene.layout.VBox(8);
+        Label statusLabel = new Label("Status");
+        statusLabel.setStyle(labelStyle);
         ComboBox<String> statusCombo = new ComboBox<>();
         statusCombo.getItems().addAll("Active", "Inactive", "Suspended");
         statusCombo.setValue("Active");
+        statusCombo.setStyle(fieldStyle + "-fx-pref-width: 165;");
+        statusContainer.getChildren().addAll(statusLabel, statusCombo);
+        
+        roleStatusContainer.getChildren().addAll(roleContainer, statusContainer);
 
+        // Populate fields if editing user
         if (user != null) {
             usernameField.setText(user.getUsername());
             fullNameField.setText(user.getFullName());
             emailField.setText(user.getEmail());
-            passwordField.setText("******"); // Don't show actual password
+            passwordField.setPromptText("Leave blank to keep current password");
             roleCombo.setValue(user.getRole());
             statusCombo.setValue(user.getStatus());
         }
 
-        grid.add(new Label("Username:"), 0, 0);
-        grid.add(usernameField, 1, 0);
-        grid.add(new Label("Full Name:"), 0, 1);
-        grid.add(fullNameField, 1, 1);
-        grid.add(new Label("Email:"), 0, 2);
-        grid.add(emailField, 1, 2);
-        grid.add(new Label("Password:"), 0, 3);
-        grid.add(passwordField, 1, 3);
-        grid.add(new Label("Role:"), 0, 4);
-        grid.add(roleCombo, 1, 4);
-        grid.add(new Label("Status:"), 0, 5);
-        grid.add(statusCombo, 1, 5);
-
-        dialog.getDialogPane().setContent(grid);
+        // Add all form elements to form container
+        formContainer.getChildren().addAll(
+            usernameContainer,
+            fullNameContainer, 
+            emailContainer,
+            passwordContainer,
+            roleStatusContainer
+        );
+        
+        // Add all elements to content container
+        contentContainer.getChildren().addAll(titleLabel, formContainer);
+        
+        // Add content to main container with minimal padding
+        mainContainer.getChildren().add(contentContainer);
+        mainContainer.setPadding(new javafx.geometry.Insets(0));
+        
+        dialog.getDialogPane().setContent(mainContainer);
+        
+        // Style the buttons
+        dialog.getDialogPane().lookupButton(saveButtonType).setStyle(
+            "-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); " +
+            "-fx-text-fill: white; " +
+            "-fx-font-weight: bold; " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 10 20 10 20; " +
+            "-fx-font-size: 14px;"
+        );
+        
+        dialog.getDialogPane().lookupButton(ButtonType.CANCEL).setStyle(
+            "-fx-background-color: #f5f5f5; " +
+            "-fx-text-fill: #666; " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 10 20 10 20; " +
+            "-fx-font-size: 14px;" +
+            "-fx-border-color: #ddd; " +
+            "-fx-border-radius: 8;"
+        );
+        
+        // Set dialog size to fit content better
+        dialog.getDialogPane().setPrefWidth(450);
+        dialog.getDialogPane().setPrefHeight(550);
 
         // Add validation
         dialog.getDialogPane().lookupButton(saveButtonType).addEventFilter(javafx.event.ActionEvent.ACTION, event -> {
@@ -805,7 +980,8 @@ public class UserManagementController implements Initializable {
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
-                String password = (user == null) ? passwordField.getText().trim() : "******";
+                String password = (user == null || !passwordField.getText().trim().isEmpty()) ? 
+                    passwordField.getText().trim() : "******";
                 return new SystemUser(
                     user != null ? user.getId() : users.size() + 1,
                     usernameField.getText().trim(),
@@ -814,8 +990,8 @@ public class UserManagementController implements Initializable {
                     password,
                     roleCombo.getValue(),
                     statusCombo.getValue(),
-                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")),
-                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+                    user != null ? user.getLastLogin() : LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")),
+                    user != null ? user.getCreatedDate() : LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
                 );
             }
             return null;
@@ -830,14 +1006,193 @@ public class UserManagementController implements Initializable {
             if (connection != null && !connection.isClosed()) {
                 connection.close();
             }
+            // SecurityLogger manages its own connections (auto-closed)
         } catch (SQLException e) {
             logger.log(Level.SEVERE, "Error closing database connection", e);
         }
     }
     
     private String generateTempPassword() {
-        // Simple temporary password generator
-        return "Temp" + (int)(Math.random() * 10000);
+        // Generate a secure temporary password with mixed case, numbers and symbols
+        String upperCase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        String lowerCase = "abcdefghijklmnopqrstuvwxyz";
+        String numbers = "0123456789";
+        String symbols = "@#$%&*";
+        String allChars = upperCase + lowerCase + numbers + symbols;
+        
+        StringBuilder tempPassword = new StringBuilder();
+        java.util.Random random = new java.util.Random();
+        
+        // Ensure at least one character from each category
+        tempPassword.append(upperCase.charAt(random.nextInt(upperCase.length())));
+        tempPassword.append(lowerCase.charAt(random.nextInt(lowerCase.length())));
+        tempPassword.append(numbers.charAt(random.nextInt(numbers.length())));
+        tempPassword.append(symbols.charAt(random.nextInt(symbols.length())));
+        
+        // Fill the rest to make it 8 characters total
+        for (int i = 4; i < 8; i++) {
+            tempPassword.append(allChars.charAt(random.nextInt(allChars.length())));
+        }
+        
+        // Shuffle the password to randomize positions
+        String password = tempPassword.toString();
+        char[] passwordArray = password.toCharArray();
+        for (int i = passwordArray.length - 1; i > 0; i--) {
+            int j = random.nextInt(i + 1);
+            char temp = passwordArray[i];
+            passwordArray[i] = passwordArray[j];
+            passwordArray[j] = temp;
+        }
+        
+        return new String(passwordArray);
+    }
+    
+    private void showPasswordResetDialog(String fullName, String tempPassword) {
+        // Create custom dialog
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Password Reset Successful");
+        dialog.setHeaderText(null);
+        
+        // Create main container with green theme
+        javafx.scene.layout.VBox mainContainer = new javafx.scene.layout.VBox();
+        mainContainer.setStyle("-fx-background-color: linear-gradient(to bottom right, #2e7d32, #66bb6a);");
+        
+        // Create content container
+        javafx.scene.layout.VBox contentContainer = new javafx.scene.layout.VBox();
+        contentContainer.setStyle("-fx-background-color: white;");
+        contentContainer.setPadding(new javafx.geometry.Insets(30, 40, 30, 40));
+        contentContainer.setSpacing(20);
+        
+        // Title
+        Label titleLabel = new Label("🔑 Password Reset Successful");
+        titleLabel.setStyle(
+            "-fx-text-fill: #1b5e20; " +
+            "-fx-font-size: 22px; " +
+            "-fx-font-weight: bold; " +
+            "-fx-alignment: center;"
+        );
+        
+        // User info
+        Label userLabel = new Label("Temporary password generated for: " + fullName);
+        userLabel.setStyle(
+            "-fx-text-fill: #666; " +
+            "-fx-font-size: 14px; " +
+            "-fx-alignment: center;"
+        );
+        
+        // Password container with copy functionality
+        javafx.scene.layout.VBox passwordContainer = new javafx.scene.layout.VBox(10);
+        
+        Label passwordLabel = new Label("Temporary Password:");
+        passwordLabel.setStyle(
+            "-fx-text-fill: #1b5e20; " +
+            "-fx-font-size: 14px; " +
+            "-fx-font-weight: bold;"
+        );
+        
+        // Password field and copy button container
+        javafx.scene.layout.HBox passwordFieldContainer = new javafx.scene.layout.HBox(10);
+        passwordFieldContainer.setAlignment(javafx.geometry.Pos.CENTER);
+        
+        TextField passwordField = new TextField(tempPassword);
+        passwordField.setEditable(false);
+        passwordField.setStyle(
+            "-fx-background-color: #f8f9fa; " +
+            "-fx-border-color: #28a745; " +
+            "-fx-border-width: 2; " +
+            "-fx-border-radius: 8; " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 10; " +
+            "-fx-font-size: 16px; " +
+            "-fx-font-weight: bold; " +
+            "-fx-text-fill: #1b5e20; " +
+            "-fx-pref-width: 200;"
+        );
+        
+        Button copyButton = new Button("📋 Copy");
+        copyButton.setStyle(
+            "-fx-background-color: #28a745; " +
+            "-fx-text-fill: white; " +
+            "-fx-font-weight: bold; " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 10 15 10 15; " +
+            "-fx-font-size: 14px; " +
+            "-fx-cursor: hand;"
+        );
+        
+        // Copy functionality
+        copyButton.setOnAction(e -> {
+            javafx.scene.input.Clipboard clipboard = javafx.scene.input.Clipboard.getSystemClipboard();
+            javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+            content.putString(tempPassword);
+            clipboard.setContent(content);
+            
+            // Visual feedback
+            copyButton.setText("✅ Copied!");
+            copyButton.setStyle(
+                "-fx-background-color: #218838; " +
+                "-fx-text-fill: white; " +
+                "-fx-font-weight: bold; " +
+                "-fx-background-radius: 8; " +
+                "-fx-padding: 10 15 10 15; " +
+                "-fx-font-size: 14px;"
+            );
+            
+            // Reset button after 2 seconds
+            javafx.animation.Timeline timeline = new javafx.animation.Timeline(
+                new javafx.animation.KeyFrame(javafx.util.Duration.seconds(2), evt -> {
+                    copyButton.setText("📋 Copy");
+                    copyButton.setStyle(
+                        "-fx-background-color: #28a745; " +
+                        "-fx-text-fill: white; " +
+                        "-fx-font-weight: bold; " +
+                        "-fx-background-radius: 8; " +
+                        "-fx-padding: 10 15 10 15; " +
+                        "-fx-font-size: 14px; " +
+                        "-fx-cursor: hand;"
+                    );
+                })
+            );
+            timeline.play();
+        });
+        
+        passwordFieldContainer.getChildren().addAll(passwordField, copyButton);
+        passwordContainer.getChildren().addAll(passwordLabel, passwordFieldContainer);
+        
+        // Security note
+        Label securityNote = new Label("⚠️ Please share this password securely with the user.\nThey should change it upon first login.");
+        securityNote.setStyle(
+            "-fx-text-fill: #856404; " +
+            "-fx-font-size: 12px; " +
+            "-fx-alignment: center; " +
+            "-fx-text-alignment: center;"
+        );
+        
+        // Add all elements to content container
+        contentContainer.getChildren().addAll(titleLabel, userLabel, passwordContainer, securityNote);
+        
+        // Add content to main container
+        mainContainer.getChildren().add(contentContainer);
+        
+        dialog.getDialogPane().setContent(mainContainer);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        
+        // Style close button
+        Button closeBtn = (Button) dialog.getDialogPane().lookupButton(ButtonType.CLOSE);
+        closeBtn.setText("Close");
+        closeBtn.setStyle(
+            "-fx-background-color: #6c757d; " +
+            "-fx-text-fill: white; " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 10 20 10 20; " +
+            "-fx-font-size: 14px;"
+        );
+        
+        // Set dialog size
+        dialog.getDialogPane().setPrefWidth(450);
+        dialog.getDialogPane().setPrefHeight(350);
+        
+        dialog.showAndWait();
     }
 
     private void showInfo(String title, String message) {

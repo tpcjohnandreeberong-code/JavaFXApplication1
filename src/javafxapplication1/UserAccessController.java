@@ -27,12 +27,9 @@ public class UserAccessController implements Initializable {
     private static final Logger logger = Logger.getLogger(UserAccessController.class.getName());
     
     // Database connection parameters
-    // private static final String DB_URL = "jdbc:mysql://127.0.0.1:3306/payroll";
-    // private static final String DB_USER = "tpc_user";
-    // private static final String DB_PASSWORD = "tpcuser123!";
-    private static final String DB_URL = "jdbc:mysql://127.0.0.1:3307/payroll";
-    private static final String DB_USER = "root";
-    private static final String DB_PASSWORD = "berong123!";
+    private static final String DB_URL = DatabaseConfig.getDbUrl();
+    private static final String DB_USER = DatabaseConfig.getDbUser();
+    private static final String DB_PASSWORD = DatabaseConfig.getDbPassword();
     private Connection connection;
 
     // FXML Controls - Role Management

@@ -45,6 +45,7 @@
 <TabPane fx:id="securityTabPane" tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
 <tabs>
 <!-- Password Policy Tab -->
+<!-- COMMENTED OUT - Password Policy Tab
 <Tab text="Password Policy">
 <content>
 <VBox spacing="16.0">
@@ -97,56 +98,8 @@
 </VBox>
 </content>
 </Tab>
+END OF COMMENTED OUT PASSWORD POLICY TAB -->
 
-<!-- Access Control Tab -->
-<Tab text="Access Control">
-<content>
-<VBox spacing="16.0">
-<children>
-<Label style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" text="User Access Control" />
-<GridPane hgap="16.0" vgap="12.0">
-<columnConstraints>
-<ColumnConstraints hgrow="NEVER" minWidth="200.0" />
-<ColumnConstraints hgrow="ALWAYS" />
-</columnConstraints>
-<rowConstraints>
-<RowConstraints />
-<RowConstraints />
-<RowConstraints />
-<RowConstraints />
-<RowConstraints />
-<RowConstraints />
-</rowConstraints>
-<children>
-<Label text="Session Timeout (Minutes):" GridPane.columnIndex="0" GridPane.rowIndex="0" />
-<Spinner fx:id="sessionTimeout" editable="true" GridPane.columnIndex="1" GridPane.rowIndex="0" />
-
-<Label text="Max Login Attempts:" GridPane.columnIndex="0" GridPane.rowIndex="1" />
-<Spinner fx:id="maxLoginAttempts" editable="true" GridPane.columnIndex="1" GridPane.rowIndex="1" />
-
-<Label text="Account Lockout Duration (Minutes):" GridPane.columnIndex="0" GridPane.rowIndex="2" />
-<Spinner fx:id="lockoutDuration" editable="true" GridPane.columnIndex="1" GridPane.rowIndex="2" />
-
-<Label text="Enable Two-Factor Authentication:" GridPane.columnIndex="0" GridPane.rowIndex="3" />
-<CheckBox fx:id="enable2FA" selected="false" GridPane.columnIndex="1" GridPane.rowIndex="3" />
-
-<Label text="Require Strong Passwords:" GridPane.columnIndex="0" GridPane.rowIndex="4" />
-<CheckBox fx:id="requireStrongPasswords" selected="true" GridPane.columnIndex="1" GridPane.rowIndex="4" />
-
-<Label text="Enable Security Logging:" GridPane.columnIndex="0" GridPane.rowIndex="5" />
-<CheckBox fx:id="enableSecurityLogging" selected="true" GridPane.columnIndex="1" GridPane.rowIndex="5" />
-</children>
-</GridPane>
-<HBox spacing="8.0">
-<children>
-<Button onAction="#onSaveAccessControl" style="-fx-background-color: #4caf50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Save Settings" />
-<Button onAction="#onResetAccessControl" style="-fx-background-color: #ff9800; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Reset to Default" />
-</children>
-</HBox>
-</children>
-</VBox>
-</content>
-</Tab>
 
 <!-- Security Monitoring Tab -->
 <Tab text="Security Monitoring">

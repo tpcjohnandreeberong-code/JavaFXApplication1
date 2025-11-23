@@ -54,8 +54,7 @@
 <columns>
 <TableColumn fx:id="colPayrollId" text="Payroll ID" prefWidth="120.0" />
 <TableColumn fx:id="colEmployeeId" text="Employee ID" prefWidth="100.0" />
-<TableColumn fx:id="colEmployeeName" text="Employee Name" prefWidth="200.0" />
-<TableColumn fx:id="colDepartment" text="Department" prefWidth="150.0" />
+<TableColumn fx:id="colEmployeeName" text="Employee Name" prefWidth="250.0" />
 <TableColumn fx:id="colPosition" text="Position" prefWidth="150.0" />
 <TableColumn fx:id="colPayPeriod" text="Pay Period" prefWidth="120.0" />
 <TableColumn fx:id="colBasicSalary" text="Basic Salary" prefWidth="120.0" />

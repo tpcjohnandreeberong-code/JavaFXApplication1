@@ -10,6 +10,7 @@ import javafx.stage.FileChooser;
 
 import java.io.File;
 import java.net.URL;
+import java.sql.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Optional;
@@ -17,6 +18,11 @@ import java.util.ResourceBundle;
 import javafx.scene.layout.GridPane;
 
 public class GovernmentRemittancesController implements Initializable {
+
+    // Database connection constants
+    private static final String DB_URL = DatabaseConfig.getDbUrl();
+    private static final String DB_USER = DatabaseConfig.getDbUser();
+    private static final String DB_PASSWORD = DatabaseConfig.getDbPassword();
 
     // Controls
     @FXML private TextField searchField;
@@ -49,7 +55,7 @@ public class GovernmentRemittancesController implements Initializable {
     public void initialize(URL url, ResourceBundle resourceBundle) {
         setupTableColumns();
         setupComboBoxes();
-        loadSampleData();
+        loadDeductionsFromDatabase();
     }
 
     private void setupTableColumns() {
@@ -83,21 +89,47 @@ public class GovernmentRemittancesController implements Initializable {
         statusFilter.setValue("All Types");
     }
 
-    private void loadSampleData() {
-        // Sample deduction types based on your exact database structure
-        deductionTypes.addAll(
-            new DeductionType(1, "SSS", "Social Security System", "Social security contribution", 
-                             "salary", 15.0, null, 5000.0, 35000.0, 5.0, 10.0, null, null, 5.0, 10.0, 15.0),
-            new DeductionType(2, "PHILHEALTH", "PhilHealth Insurance", "Health insurance contribution", 
-                             "salary", 5.0, null, 10000.0, 100000.0, 2.5, 2.5, null, null, 2.5, 2.5, 5.0),
-            new DeductionType(3, "PAGIBIG", "Pag-IBIG Fund", "Home Development Mutual Fund", 
-                             "salary", 2.0, null, 0.0, 10000.0, 1.0, 1.0, null, null, 1.0, 1.0, 2.0),
-            new DeductionType(4, "TAX", "Withholding Tax", "Income tax (TRAIN Law 2025)", 
-                             "salary", 0.0, 0.0, 0.0, 20833.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
-            new DeductionType(5, "TAX", "Withholding Tax", "Income tax (TRAIN Law 2025)", 
-                             "salary", 15.0, null, 20833.01, 33332.0, 100.0, 0.0, 0.0, 20833.0, 15.0, 0.0, 15.0)
-        );
-        deductionTable.setItems(deductionTypes);
+    // Database connection method
+    private Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+    }
+
+    private void loadDeductionsFromDatabase() {
+        deductionTypes.clear();
+        
+        String sql = "SELECT * FROM deductions WHERE is_active = TRUE ORDER BY code";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            
+            while (rs.next()) {
+                DeductionType deduction = new DeductionType(
+                    rs.getInt("id"),
+                    rs.getString("code"),
+                    rs.getString("name"),
+                    rs.getString("description"),
+                    rs.getString("basis"),
+                    rs.getObject("rate_percent") != null ? rs.getDouble("rate_percent") : null,
+                    rs.getObject("fixed_amount") != null ? rs.getDouble("fixed_amount") : null,
+                    rs.getDouble("min_salary"),
+                    rs.getDouble("max_salary"),
+                    rs.getDouble("employee_share"),
+                    rs.getDouble("employer_share"),
+                    rs.getObject("base_tax") != null ? rs.getDouble("base_tax") : null,
+                    rs.getObject("excess_over") != null ? rs.getDouble("excess_over") : null,
+                    rs.getDouble("effective_employee_percent"),
+                    rs.getDouble("effective_employer_percent"),
+                    rs.getDouble("effective_total_percent")
+                );
+                deductionTypes.add(deduction);
+            }
+            
+            deductionTable.setItems(deductionTypes);
+            
+        } catch (SQLException e) {
+            showErrorAlert("Database Error: Failed to load deductions.\n" + e.getMessage());
+        }
     }
 
     // Action Methods
@@ -133,9 +165,68 @@ public class GovernmentRemittancesController implements Initializable {
         Dialog<DeductionType> dialog = buildDeductionDialog(null);
         Optional<DeductionType> result = dialog.showAndWait();
         result.ifPresent(deduction -> {
-            deductionTypes.add(deduction);
-            showSuccessAlert("Deduction type added successfully!");
+            if (insertDeductionToDatabase(deduction)) {
+                loadDeductionsFromDatabase(); // Refresh the table
+                showSuccessAlert("Deduction type added successfully!");
+            }
         });
+    }
+
+    private boolean insertDeductionToDatabase(DeductionType deduction) {
+        String sql = "INSERT INTO deductions (code, name, description, basis, rate_percent, " +
+                    "fixed_amount, min_salary, max_salary, employee_share, employer_share, " +
+                    "base_tax, excess_over, effective_employee_percent, effective_employer_percent, " +
+                    "effective_total_percent, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setString(1, deduction.getCode());
+            stmt.setString(2, deduction.getName());
+            stmt.setString(3, deduction.getDescription());
+            stmt.setString(4, deduction.getBasis());
+            
+            if (deduction.getRatePercent() != null) {
+                stmt.setDouble(5, deduction.getRatePercent());
+            } else {
+                stmt.setNull(5, Types.DECIMAL);
+            }
+            
+            if (deduction.getFixedAmount() != null) {
+                stmt.setDouble(6, deduction.getFixedAmount());
+            } else {
+                stmt.setNull(6, Types.DECIMAL);
+            }
+            
+            stmt.setDouble(7, deduction.getMinSalary());
+            stmt.setDouble(8, deduction.getMaxSalary());
+            stmt.setDouble(9, deduction.getEmployeeShare());
+            stmt.setDouble(10, deduction.getEmployerShare());
+            
+            if (deduction.getBaseTax() != null) {
+                stmt.setDouble(11, deduction.getBaseTax());
+            } else {
+                stmt.setNull(11, Types.DECIMAL);
+            }
+            
+            if (deduction.getExcessOver() != null) {
+                stmt.setDouble(12, deduction.getExcessOver());
+            } else {
+                stmt.setNull(12, Types.DECIMAL);
+            }
+            
+            stmt.setDouble(13, deduction.getEffectiveEmployeePercent());
+            stmt.setDouble(14, deduction.getEffectiveEmployerPercent());
+            stmt.setDouble(15, deduction.getEffectiveTotalPercent());
+            stmt.setString(16, "admin"); // Current user - you can get this from session
+            
+            int rowsAffected = stmt.executeUpdate();
+            return rowsAffected > 0;
+            
+        } catch (SQLException e) {
+            showErrorAlert("Database Error: Failed to add deduction.\n" + e.getMessage());
+            return false;
+        }
     }
 
     @FXML
@@ -149,12 +240,68 @@ public class GovernmentRemittancesController implements Initializable {
         Dialog<DeductionType> dialog = buildDeductionDialog(selected);
         Optional<DeductionType> result = dialog.showAndWait();
         result.ifPresent(updated -> {
-            int idx = deductionTypes.indexOf(selected);
-            if (idx >= 0) {
-                deductionTypes.set(idx, updated);
+            if (updateDeductionInDatabase(updated)) {
+                loadDeductionsFromDatabase(); // Refresh the table
                 showSuccessAlert("Deduction type updated successfully!");
             }
         });
+    }
+
+    private boolean updateDeductionInDatabase(DeductionType deduction) {
+        String sql = "UPDATE deductions SET name = ?, description = ?, basis = ?, rate_percent = ?, " +
+                    "fixed_amount = ?, min_salary = ?, max_salary = ?, employee_share = ?, employer_share = ?, " +
+                    "base_tax = ?, excess_over = ?, effective_employee_percent = ?, effective_employer_percent = ?, " +
+                    "effective_total_percent = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setString(1, deduction.getName());
+            stmt.setString(2, deduction.getDescription());
+            stmt.setString(3, deduction.getBasis());
+            
+            if (deduction.getRatePercent() != null) {
+                stmt.setDouble(4, deduction.getRatePercent());
+            } else {
+                stmt.setNull(4, Types.DECIMAL);
+            }
+            
+            if (deduction.getFixedAmount() != null) {
+                stmt.setDouble(5, deduction.getFixedAmount());
+            } else {
+                stmt.setNull(5, Types.DECIMAL);
+            }
+            
+            stmt.setDouble(6, deduction.getMinSalary());
+            stmt.setDouble(7, deduction.getMaxSalary());
+            stmt.setDouble(8, deduction.getEmployeeShare());
+            stmt.setDouble(9, deduction.getEmployerShare());
+            
+            if (deduction.getBaseTax() != null) {
+                stmt.setDouble(10, deduction.getBaseTax());
+            } else {
+                stmt.setNull(10, Types.DECIMAL);
+            }
+            
+            if (deduction.getExcessOver() != null) {
+                stmt.setDouble(11, deduction.getExcessOver());
+            } else {
+                stmt.setNull(11, Types.DECIMAL);
+            }
+            
+            stmt.setDouble(12, deduction.getEffectiveEmployeePercent());
+            stmt.setDouble(13, deduction.getEffectiveEmployerPercent());
+            stmt.setDouble(14, deduction.getEffectiveTotalPercent());
+            stmt.setString(15, "admin"); // Current user
+            stmt.setInt(16, deduction.getId());
+            
+            int rowsAffected = stmt.executeUpdate();
+            return rowsAffected > 0;
+            
+        } catch (SQLException e) {
+            showErrorAlert("Database Error: Failed to update deduction.\n" + e.getMessage());
+            return false;
+        }
     }
 
     @FXML
@@ -168,18 +315,39 @@ public class GovernmentRemittancesController implements Initializable {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
         confirm.setTitle("Delete Deduction Type");
         confirm.setHeaderText(null);
-        confirm.setContentText("Delete deduction type " + selected.getCode() + " - " + selected.getName() + "?");
+        confirm.setContentText("Delete deduction type " + selected.getCode() + " - " + selected.getName() + "?\n\nNote: This will permanently remove the deduction type.");
         Optional<ButtonType> result = confirm.showAndWait();
         
         if (result.isPresent() && result.get() == ButtonType.OK) {
-            deductionTypes.remove(selected);
-            showSuccessAlert("Deduction type deleted successfully!");
+            if (deleteDeductionFromDatabase(selected.getId())) {
+                loadDeductionsFromDatabase(); // Refresh the table
+                showSuccessAlert("Deduction type deleted successfully!");
+            }
+        }
+    }
+
+    private boolean deleteDeductionFromDatabase(int deductionId) {
+        // Instead of hard delete, we'll soft delete by setting is_active = FALSE
+        String sql = "UPDATE deductions SET is_active = FALSE, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setString(1, "admin"); // Current user
+            stmt.setInt(2, deductionId);
+            
+            int rowsAffected = stmt.executeUpdate();
+            return rowsAffected > 0;
+            
+        } catch (SQLException e) {
+            showErrorAlert("Database Error: Failed to delete deduction.\n" + e.getMessage());
+            return false;
         }
     }
 
     @FXML
     private void onRefresh() {
-        loadSampleData();
+        loadDeductionsFromDatabase();
         showSuccessAlert("Data refreshed successfully!");
     }
 
@@ -204,48 +372,150 @@ public class GovernmentRemittancesController implements Initializable {
     // Helper Methods
     private Dialog<DeductionType> buildDeductionDialog(DeductionType deduction) {
         Dialog<DeductionType> dialog = new Dialog<>();
-        dialog.setTitle(deduction == null ? "Add New Deduction Type" : "Edit Deduction Type");
+        dialog.setTitle(deduction == null ? "Add Deduction Type" : "Edit Deduction Type");
+        
+        // Remove default header
         dialog.setHeaderText(null);
-
+        
+        // Custom button types with styled appearance
         ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
 
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new javafx.geometry.Insets(20, 150, 10, 10));
+        // Create main container with green gradient background
+        javafx.scene.layout.VBox mainContainer = new javafx.scene.layout.VBox();
+        mainContainer.setStyle("-fx-background-color: linear-gradient(to bottom right, #ffffffff, #ffffffff);");
+        
+        // Create content container with white background
+        javafx.scene.layout.VBox contentContainer = new javafx.scene.layout.VBox();
+        contentContainer.setStyle("-fx-background-color: white;");
+        contentContainer.setPadding(new javafx.geometry.Insets(30, 40, 30, 40));
+        contentContainer.setSpacing(0);
+        
+        // Title Label
+        Label titleLabel = new Label(deduction == null ? "Add New Deduction Type" : "Edit Deduction Type");
+        titleLabel.setStyle(
+            "-fx-text-fill: #1b5e20; " +
+            "-fx-font-size: 22px; " +
+            "-fx-font-weight: bold; " +
+            "-fx-alignment: center;"
+        );
+        
+        // Styled input fields
+        String fieldStyle = 
+            "-fx-background-radius: 6; " +
+            "-fx-border-radius: 6; " +
+            "-fx-border-color: #c8e6c9; " +
+            "-fx-border-width: 1; " +
+            "-fx-focus-color: #66bb6a; " +
+            "-fx-faint-focus-color: transparent; " +
+            "-fx-padding: 4 8 4 8; " +
+            "-fx-font-size: 12px; " +
+            "-fx-pref-width: 220;";
+            
+        String comboBoxStyle = fieldStyle + "-fx-background-color: white;";
+            
+        String labelStyle = 
+            "-fx-text-fill: #1b5e20; " +
+            "-fx-font-size: 12px; " +
+            "-fx-font-weight: bold;";
 
+        // Create form fields in a three-column layout for better space utilization
+        javafx.scene.layout.GridPane formGrid = new javafx.scene.layout.GridPane();
+        formGrid.setHgap(15);
+        formGrid.setVgap(12);
+        
+        // Create fields directly in grid layout
         TextField codeField = new TextField();
-        codeField.setPromptText("Code (e.g., SSS, PHILHEALTH)");
         TextField nameField = new TextField();
-        nameField.setPromptText("Name");
         TextField descriptionField = new TextField();
-        descriptionField.setPromptText("Description");
         ComboBox<String> basisCombo = new ComboBox<>();
-        basisCombo.getItems().addAll("salary", "range", "fixed");
         TextField rateField = new TextField();
-        rateField.setPromptText("Rate %");
         TextField fixedAmountField = new TextField();
-        fixedAmountField.setPromptText("Fixed Amount");
         TextField minSalaryField = new TextField();
-        minSalaryField.setPromptText("Min Salary");
         TextField maxSalaryField = new TextField();
-        maxSalaryField.setPromptText("Max Salary");
         TextField employeeShareField = new TextField();
-        employeeShareField.setPromptText("Employee Share");
         TextField employerShareField = new TextField();
-        employerShareField.setPromptText("Employer Share");
         TextField baseTaxField = new TextField();
-        baseTaxField.setPromptText("Base Tax");
         TextField excessOverField = new TextField();
-        excessOverField.setPromptText("Excess Over");
         TextField effectiveEmployeePercentField = new TextField();
-        effectiveEmployeePercentField.setPromptText("Effective Employee %");
         TextField effectiveEmployerPercentField = new TextField();
-        effectiveEmployerPercentField.setPromptText("Effective Employer %");
         TextField effectiveTotalPercentField = new TextField();
-        effectiveTotalPercentField.setPromptText("Effective Total %");
 
+        // Set prompts and styles
+        codeField.setPromptText("Enter code (e.g., SSS)");
+        codeField.setStyle(fieldStyle);
+        nameField.setPromptText("Enter deduction name");
+        nameField.setStyle(fieldStyle);
+        descriptionField.setPromptText("Enter description");
+        descriptionField.setStyle(fieldStyle);
+        basisCombo.getItems().addAll("salary", "range", "fixed");
+        basisCombo.setPromptText("Select basis");
+        basisCombo.setStyle(comboBoxStyle);
+        rateField.setPromptText("Rate %");
+        rateField.setStyle(fieldStyle);
+        fixedAmountField.setPromptText("Fixed amount");
+        fixedAmountField.setStyle(fieldStyle);
+        minSalaryField.setPromptText("Min salary");
+        minSalaryField.setStyle(fieldStyle);
+        maxSalaryField.setPromptText("Max salary");
+        maxSalaryField.setStyle(fieldStyle);
+        employeeShareField.setPromptText("Employee share");
+        employeeShareField.setStyle(fieldStyle);
+        employerShareField.setPromptText("Employer share");
+        employerShareField.setStyle(fieldStyle);
+        baseTaxField.setPromptText("Base tax");
+        baseTaxField.setStyle(fieldStyle);
+        excessOverField.setPromptText("Excess over");
+        excessOverField.setStyle(fieldStyle);
+        effectiveEmployeePercentField.setPromptText("Eff. employee %");
+        effectiveEmployeePercentField.setStyle(fieldStyle);
+        effectiveEmployerPercentField.setPromptText("Eff. employer %");
+        effectiveEmployerPercentField.setStyle(fieldStyle);
+        effectiveTotalPercentField.setPromptText("Eff. total %");
+        effectiveTotalPercentField.setStyle(fieldStyle);
+
+        // Add fields to grid in 3 columns
+        int row = 0;
+        // Column 1 - Basic Info
+        formGrid.add(new Label("Code:") {{ setStyle(labelStyle); }}, 0, row);
+        formGrid.add(codeField, 1, row);
+        formGrid.add(new Label("Min Salary:") {{ setStyle(labelStyle); }}, 2, row);
+        formGrid.add(minSalaryField, 3, row++);
+        
+        formGrid.add(new Label("Name:") {{ setStyle(labelStyle); }}, 0, row);
+        formGrid.add(nameField, 1, row);
+        formGrid.add(new Label("Max Salary:") {{ setStyle(labelStyle); }}, 2, row);
+        formGrid.add(maxSalaryField, 3, row++);
+        
+        formGrid.add(new Label("Description:") {{ setStyle(labelStyle); }}, 0, row);
+        formGrid.add(descriptionField, 1, row);
+        formGrid.add(new Label("Employee Share:") {{ setStyle(labelStyle); }}, 2, row);
+        formGrid.add(employeeShareField, 3, row++);
+        
+        formGrid.add(new Label("Basis:") {{ setStyle(labelStyle); }}, 0, row);
+        formGrid.add(basisCombo, 1, row);
+        formGrid.add(new Label("Employer Share:") {{ setStyle(labelStyle); }}, 2, row);
+        formGrid.add(employerShareField, 3, row++);
+        
+        formGrid.add(new Label("Rate %:") {{ setStyle(labelStyle); }}, 0, row);
+        formGrid.add(rateField, 1, row);
+        formGrid.add(new Label("Base Tax:") {{ setStyle(labelStyle); }}, 2, row);
+        formGrid.add(baseTaxField, 3, row++);
+        
+        formGrid.add(new Label("Fixed Amount:") {{ setStyle(labelStyle); }}, 0, row);
+        formGrid.add(fixedAmountField, 1, row);
+        formGrid.add(new Label("Excess Over:") {{ setStyle(labelStyle); }}, 2, row);
+        formGrid.add(excessOverField, 3, row++);
+        
+        formGrid.add(new Label("Eff. Employee %:") {{ setStyle(labelStyle); }}, 0, row);
+        formGrid.add(effectiveEmployeePercentField, 1, row);
+        formGrid.add(new Label("Eff. Employer %:") {{ setStyle(labelStyle); }}, 2, row);
+        formGrid.add(effectiveEmployerPercentField, 3, row++);
+        
+        formGrid.add(new Label("Eff. Total %:") {{ setStyle(labelStyle); }}, 0, row);
+        formGrid.add(effectiveTotalPercentField, 1, row, 3, 1);
+
+        // Populate fields if editing deduction
         if (deduction != null) {
             codeField.setText(deduction.getCode());
             nameField.setText(deduction.getName());
@@ -265,60 +535,81 @@ public class GovernmentRemittancesController implements Initializable {
         } else {
             basisCombo.setValue("salary");
         }
+        
+        // Add all elements to content container
+        contentContainer.getChildren().addAll(titleLabel, formGrid);
+        
+        // Add content to main container
+        mainContainer.getChildren().add(contentContainer);
+        
+        dialog.getDialogPane().setContent(mainContainer);
+        
+        // Style the buttons
+        dialog.getDialogPane().lookupButton(saveButtonType).setStyle(
+            "-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); " +
+            "-fx-text-fill: white; " +
+            "-fx-font-weight: bold; " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 10 20 10 20; " +
+            "-fx-font-size: 14px;"
+        );
+        
+        dialog.getDialogPane().lookupButton(ButtonType.CANCEL).setStyle(
+            "-fx-background-color: #f5f5f5; " +
+            "-fx-text-fill: #666; " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 10 20 10 20; " +
+            "-fx-font-size: 14px;" +
+            "-fx-border-color: #ddd; " +
+            "-fx-border-radius: 8;"
+        );
+        
+        // Set dialog size to fit content properly
+        dialog.getDialogPane().setPrefWidth(760);
+        dialog.getDialogPane().setPrefHeight(480);
 
-        grid.add(new Label("Code:"), 0, 0);
-        grid.add(codeField, 1, 0);
-        grid.add(new Label("Name:"), 0, 1);
-        grid.add(nameField, 1, 1);
-        grid.add(new Label("Description:"), 0, 2);
-        grid.add(descriptionField, 1, 2);
-        grid.add(new Label("Basis:"), 0, 3);
-        grid.add(basisCombo, 1, 3);
-        grid.add(new Label("Rate %:"), 0, 4);
-        grid.add(rateField, 1, 4);
-        grid.add(new Label("Fixed Amount:"), 0, 5);
-        grid.add(fixedAmountField, 1, 5);
-        grid.add(new Label("Min Salary:"), 0, 6);
-        grid.add(minSalaryField, 1, 6);
-        grid.add(new Label("Max Salary:"), 0, 7);
-        grid.add(maxSalaryField, 1, 7);
-        grid.add(new Label("Employee Share:"), 0, 8);
-        grid.add(employeeShareField, 1, 8);
-        grid.add(new Label("Employer Share:"), 0, 9);
-        grid.add(employerShareField, 1, 9);
-        grid.add(new Label("Base Tax:"), 0, 10);
-        grid.add(baseTaxField, 1, 10);
-        grid.add(new Label("Excess Over:"), 0, 11);
-        grid.add(excessOverField, 1, 11);
-        grid.add(new Label("Eff. Employee %:"), 0, 12);
-        grid.add(effectiveEmployeePercentField, 1, 12);
-        grid.add(new Label("Eff. Employer %:"), 0, 13);
-        grid.add(effectiveEmployerPercentField, 1, 13);
-        grid.add(new Label("Eff. Total %:"), 0, 14);
-        grid.add(effectiveTotalPercentField, 1, 14);
-
-        dialog.getDialogPane().setContent(grid);
+        // Remove validation from event filter since it prevents the dialog from closing
+        // Validation will be handled in the result converter
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
-                return new DeductionType(
-                    deduction != null ? deduction.getId() : deductionTypes.size() + 1,
-                    codeField.getText(),
-                    nameField.getText(),
-                    descriptionField.getText(),
-                    basisCombo.getValue(),
-                    rateField.getText().isEmpty() ? null : Double.parseDouble(rateField.getText()),
-                    fixedAmountField.getText().isEmpty() ? null : Double.parseDouble(fixedAmountField.getText()),
-                    minSalaryField.getText().isEmpty() ? 0.0 : Double.parseDouble(minSalaryField.getText()),
-                    maxSalaryField.getText().isEmpty() ? 0.0 : Double.parseDouble(maxSalaryField.getText()),
-                    employeeShareField.getText().isEmpty() ? 0.0 : Double.parseDouble(employeeShareField.getText()),
-                    employerShareField.getText().isEmpty() ? 0.0 : Double.parseDouble(employerShareField.getText()),
-                    baseTaxField.getText().isEmpty() ? null : Double.parseDouble(baseTaxField.getText()),
-                    excessOverField.getText().isEmpty() ? null : Double.parseDouble(excessOverField.getText()),
-                    effectiveEmployeePercentField.getText().isEmpty() ? 0.0 : Double.parseDouble(effectiveEmployeePercentField.getText()),
-                    effectiveEmployerPercentField.getText().isEmpty() ? 0.0 : Double.parseDouble(effectiveEmployerPercentField.getText()),
-                    effectiveTotalPercentField.getText().isEmpty() ? 0.0 : Double.parseDouble(effectiveTotalPercentField.getText())
-                );
+                // Validate required fields
+                if (codeField.getText() == null || codeField.getText().trim().isEmpty()) {
+                    showErrorAlert("Code is required.");
+                    return null;
+                }
+                if (nameField.getText() == null || nameField.getText().trim().isEmpty()) {
+                    showErrorAlert("Name is required.");
+                    return null;
+                }
+                if (basisCombo.getValue() == null || basisCombo.getValue().isEmpty()) {
+                    showErrorAlert("Basis is required.");
+                    return null;
+                }
+                
+                try {
+                    return new DeductionType(
+                        deduction != null ? deduction.getId() : 0, // ID will be auto-generated by database
+                        codeField.getText().trim(),
+                        nameField.getText().trim(),
+                        descriptionField.getText() != null ? descriptionField.getText().trim() : "",
+                        basisCombo.getValue(),
+                        rateField.getText().trim().isEmpty() ? null : Double.parseDouble(rateField.getText().trim()),
+                        fixedAmountField.getText().trim().isEmpty() ? null : Double.parseDouble(fixedAmountField.getText().trim()),
+                        minSalaryField.getText().trim().isEmpty() ? 0.0 : Double.parseDouble(minSalaryField.getText().trim()),
+                        maxSalaryField.getText().trim().isEmpty() ? 0.0 : Double.parseDouble(maxSalaryField.getText().trim()),
+                        employeeShareField.getText().trim().isEmpty() ? 0.0 : Double.parseDouble(employeeShareField.getText().trim()),
+                        employerShareField.getText().trim().isEmpty() ? 0.0 : Double.parseDouble(employerShareField.getText().trim()),
+                        baseTaxField.getText().trim().isEmpty() ? null : Double.parseDouble(baseTaxField.getText().trim()),
+                        excessOverField.getText().trim().isEmpty() ? null : Double.parseDouble(excessOverField.getText().trim()),
+                        effectiveEmployeePercentField.getText().trim().isEmpty() ? 0.0 : Double.parseDouble(effectiveEmployeePercentField.getText().trim()),
+                        effectiveEmployerPercentField.getText().trim().isEmpty() ? 0.0 : Double.parseDouble(effectiveEmployerPercentField.getText().trim()),
+                        effectiveTotalPercentField.getText().trim().isEmpty() ? 0.0 : Double.parseDouble(effectiveTotalPercentField.getText().trim())
+                    );
+                } catch (NumberFormatException ex) {
+                    showErrorAlert("Please enter valid numeric values for all numeric fields.\nError: " + ex.getMessage());
+                    return null;
+                }
             }
             return null;
         });
@@ -328,7 +619,7 @@ public class GovernmentRemittancesController implements Initializable {
 
     private void showSuccessAlert(String message) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Government Remittances");
+        alert.setTitle("Dedcutions");
         alert.setHeaderText("Success");
         alert.setContentText(message);
         alert.showAndWait();
@@ -336,7 +627,7 @@ public class GovernmentRemittancesController implements Initializable {
 
     private void showErrorAlert(String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.setTitle("Government Remittances");
+        alert.setTitle("Dedcutions");
         alert.setHeaderText("Error");
         alert.setContentText(message);
         alert.showAndWait();

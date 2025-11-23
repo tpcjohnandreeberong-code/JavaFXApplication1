@@ -78,6 +78,28 @@ CREATE TABLE role_permissions (
 );
 
 -- =============================================
+-- SECURITY EVENTS TABLE (for Security Monitoring)
+-- =============================================
+CREATE TABLE security_events (
+    event_id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    timestamp DATETIME NOT NULL,
+    event_type VARCHAR(100) NOT NULL,
+    severity VARCHAR(20) NOT NULL,
+    username VARCHAR(100) NULL,
+    description TEXT NOT NULL,
+    ip_address VARCHAR(45) NULL,
+    user_agent TEXT NULL,
+    event_status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    INDEX idx_timestamp (timestamp),
+    INDEX idx_event_type (event_type),
+    INDEX idx_severity (severity),
+    INDEX idx_username (username),
+    INDEX idx_event_status (event_status)
+);
+
+-- =============================================
 -- INSERT DEFAULT DATA
 -- =============================================
 
@@ -158,6 +180,46 @@ WHERE module_name IN ('Dashboard', 'Employee Management', 'Payroll Processing', 
 INSERT INTO role_permissions (role_id, permission_id, granted, created_date)
 SELECT 3, permission_id, TRUE, NOW() FROM permissions 
 WHERE action_name = 'View' AND module_name IN ('Dashboard', 'Employee Management', 'Reports', 'History');
+
+-- =============================================
+-- EMPLOYEES TABLE (Main Employee Management)
+-- =============================================
+CREATE TABLE employees (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    account_number VARCHAR(50) UNIQUE NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    position VARCHAR(100),
+    salary DECIMAL(10,2) DEFAULT 0.00,
+    status ENUM('Active', 'Inactive', 'Terminated') NOT NULL DEFAULT 'Active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    INDEX idx_account_number (account_number),
+    INDEX idx_full_name (full_name),
+    INDEX idx_position (position),
+    INDEX idx_status (status)
+);
+
+-- Insert sample employee data
+INSERT INTO employees (account_number, full_name, position, salary, status) VALUES
+('EMP-001', 'Juan Cruz', 'Teacher I', 25000.00, 'Active'),
+('EMP-002', 'Maria Santos', 'Teacher II', 28000.00, 'Active'),
+('EMP-003', 'Pedro Gonzales', 'Head Teacher', 35000.00, 'Active'),
+('EMP-004', 'Ana Reyes', 'Teacher I', 25000.00, 'Active'),
+('EMP-005', 'Carlos Mendoza', 'Principal', 50000.00, 'Active');
+
+-- Insert sample security events
+INSERT INTO security_events (timestamp, event_type, severity, username, description, ip_address, event_status) VALUES
+(NOW() - INTERVAL 1 HOUR, 'LOGIN_SUCCESS', 'LOW', 'admin', 'Administrator logged in successfully', '192.168.1.100', 'ACTIVE'),
+(NOW() - INTERVAL 2 HOUR, 'LOGIN_FAILED', 'MEDIUM', 'user1', 'Failed login attempt - incorrect password', '192.168.1.101', 'ACTIVE'),
+(NOW() - INTERVAL 3 HOUR, 'PASSWORD_CHANGE', 'LOW', 'admin', 'Password changed successfully', '192.168.1.100', 'ACTIVE'),
+(NOW() - INTERVAL 4 HOUR, 'LOGIN_FAILED', 'MEDIUM', 'user2', 'Failed login attempt - account not found', '192.168.1.102', 'ACTIVE'),
+(NOW() - INTERVAL 5 HOUR, 'LOGIN_FAILED', 'HIGH', 'user2', 'Multiple failed login attempts detected', '192.168.1.102', 'ACTIVE'),
+(NOW() - INTERVAL 6 HOUR, 'PASSWORD_RESET', 'MEDIUM', 'admin', 'Password reset for user: user1', '192.168.1.100', 'ACTIVE'),
+(NOW() - INTERVAL 7 HOUR, 'LOGIN_SUCCESS', 'LOW', 'user1', 'User logged in successfully after password reset', '192.168.1.101', 'ACTIVE'),
+(NOW() - INTERVAL 8 HOUR, 'INVALID_ACCESS', 'HIGH', 'guest', 'Attempt to access restricted area without authentication', '192.168.1.200', 'ACTIVE'),
+(NOW() - INTERVAL 9 HOUR, 'USER_CREATED', 'LOW', 'admin', 'New user account created: user3', '192.168.1.100', 'ACTIVE'),
+(NOW() - INTERVAL 10 HOUR, 'PASSWORD_POLICY_UPDATE', 'MEDIUM', 'admin', 'Password policy settings updated', '192.168.1.100', 'ACTIVE');
 
 -- =============================================
 -- USEFUL QUERIES FOR LOGIN AUTHENTICATION

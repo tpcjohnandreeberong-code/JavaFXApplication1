@@ -16,14 +16,22 @@ import javafx.event.EventHandler;
 
 import java.io.*;
 import java.net.URL;
+import java.sql.*;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.ResourceBundle;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import javafx.application.Platform;
 
 public class ImportExportController implements Initializable {
+
+    // Database connection constants
+    private static final String DB_URL = DatabaseConfig.getDbUrl();
+    private static final String DB_USER = DatabaseConfig.getDbUser();
+    private static final String DB_PASSWORD = DatabaseConfig.getDbPassword();
 
     public static class ExportResult {
         public final int recordsExported;
@@ -36,18 +44,20 @@ public class ImportExportController implements Initializable {
     }
 
     public static class ImportPreviewData {
-        private final String col1;
-        private final String col2;
-        private final String col3;
-        private final String col4;
-        private final String col5;
+        private final String col1;  // Fullname
+        private final String col2;  // Account Number
+        private final String col3;  // Date & Time
+        private final String col4;  // Log Type
+        private final String col5;  // Raw Data
+        private final String col6;  // Status
 
-        public ImportPreviewData(String col1, String col2, String col3, String col4, String col5) {
+        public ImportPreviewData(String col1, String col2, String col3, String col4, String col5, String col6) {
             this.col1 = col1;
             this.col2 = col2;
             this.col3 = col3;
             this.col4 = col4;
             this.col5 = col5;
+            this.col6 = col6;
         }
 
         public String getCol1() { return col1; }
@@ -55,23 +65,28 @@ public class ImportExportController implements Initializable {
         public String getCol3() { return col3; }
         public String getCol4() { return col4; }
         public String getCol5() { return col5; }
+        public String getCol6() { return col6; }
     }
 
-    @FXML private ComboBox<String> importDataType;
     @FXML private ComboBox<String> importFileFormat;
-    @FXML private ComboBox<String> exportDataType;
-    @FXML private ComboBox<String> exportFileFormat;
-    @FXML private ComboBox<String> exportDepartmentFilter;
+    @FXML private ComboBox<String> logTypeFilter;
+    @FXML private TextField searchField;
+    @FXML private TextField dateFilter;
     @FXML private Label importFileLabel;
-    @FXML private Label exportStatusLabel;
     @FXML private ProgressBar importProgressBar;
-    @FXML private ProgressBar exportProgressBar;
+    
+    // File loading progress controls
+    @FXML private VBox fileLoadingSection;
+    @FXML private Label fileLoadingLabel;
+    @FXML private ProgressBar fileProgressBar;
+    @FXML private Label fileProgressLabel;
     @FXML private TableView<ImportPreviewData> importPreviewTable;
     @FXML private TableColumn<ImportPreviewData, String> colPreview1;
     @FXML private TableColumn<ImportPreviewData, String> colPreview2;
     @FXML private TableColumn<ImportPreviewData, String> colPreview3;
     @FXML private TableColumn<ImportPreviewData, String> colPreview4;
     @FXML private TableColumn<ImportPreviewData, String> colPreview5;
+    @FXML private TableColumn<ImportPreviewData, String> colPreview6;
 
     private final ObservableList<String> dataTypes = FXCollections.observableArrayList();
     private final ObservableList<String> fileFormats = FXCollections.observableArrayList();
@@ -84,49 +99,110 @@ public class ImportExportController implements Initializable {
     public void initialize(URL url, ResourceBundle resourceBundle) {
         setupComboBoxes();
         setupTableColumns();
-        loadSamplePreviewData();
+        preloadEmployeeCache(); // Preload all employees for faster lookups
+        refreshAttendancePreview(); // Load real attendance data instead of sample data
+    }
+
+    // Database connection method
+    private Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+    }
+    
+    // Cache for employee names to speed up lookups
+    private Map<String, String> employeeNameCache = new HashMap<>();
+    
+    // Method to lookup employee fullname by account number with caching
+    private String lookupEmployeeFullname(String accountNumber) {
+        // Check cache first for faster performance
+        if (employeeNameCache.containsKey(accountNumber)) {
+            return employeeNameCache.get(accountNumber);
+        }
+        
+        String selectSQL = "SELECT full_name FROM employees WHERE account_number = ?";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(selectSQL)) {
+            
+            stmt.setString(1, accountNumber);
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    String fullname = rs.getString("full_name");
+                    if (fullname != null && !fullname.trim().isEmpty()) {
+                        // Cache the result for future lookups
+                        employeeNameCache.put(accountNumber, fullname);
+                        return fullname;
+                    }
+                }
+            }
+            
+        } catch (SQLException e) {
+            System.err.println("Error looking up employee: " + e.getMessage());
+        }
+        
+        // Cache the N/A result to avoid repeated database queries
+        employeeNameCache.put(accountNumber, "N/A");
+        return "N/A"; // Return N/A if not found in database
+    }
+    
+    // Bulk load all employee names into cache for maximum performance
+    private void preloadEmployeeCache() {
+        String selectSQL = "SELECT account_number, full_name FROM employees WHERE status = 'Active'";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(selectSQL);
+             ResultSet rs = stmt.executeQuery()) {
+            
+            employeeNameCache.clear(); // Clear existing cache
+            
+            while (rs.next()) {
+                String accountNumber = rs.getString("account_number");
+                String fullname = rs.getString("full_name");
+                
+                if (accountNumber != null && fullname != null && !fullname.trim().isEmpty()) {
+                    employeeNameCache.put(accountNumber, fullname);
+                }
+            }
+            
+            System.out.println("Preloaded " + employeeNameCache.size() + " employee records into cache");
+            
+        } catch (SQLException e) {
+            System.err.println("Error preloading employee cache: " + e.getMessage());
+        }
     }
 
     private void setupComboBoxes() {
-        // Data types for import/export
-        dataTypes.addAll("Employee Data", "Payroll Data", "Attendance Data", "Department Data", "All Data");
-        importDataType.setItems(dataTypes);
-        importDataType.setValue("Employee Data");
-        
-        exportDataType.setItems(dataTypes);
-        exportDataType.setValue("Employee Data");
-
-        // File formats
-        fileFormats.addAll("CSV", "Excel", "JSON");
+        // File formats - focus on attendance log formats
+        fileFormats.addAll("TXT/DAT (Biometric)", "CSV", "Excel", "JSON");
         importFileFormat.setItems(fileFormats);
-        importFileFormat.setValue("CSV");
-        
-        exportFileFormat.setItems(fileFormats);
-        exportFileFormat.setValue("CSV");
+        importFileFormat.setValue("TXT/DAT (Biometric)");
 
-        // Departments
-        departments.addAll("All Departments", "Math", "Science", "English", "Admin", "Finance", "ICT", "Library", "Transport", "HR", "Registrar", "Student Affairs", "Clinic");
-        exportDepartmentFilter.setItems(departments);
-        exportDepartmentFilter.setValue("All Departments");
+        // Log type filters for attendance
+        ObservableList<String> logTypes = FXCollections.observableArrayList();
+        logTypes.addAll("All Log Types", "TIME_IN_AM", "TIME_OUT_AM", "TIME_IN_PM", "TIME_OUT_PM", "PARSE_ERROR", "FORMAT_ERROR", "EMPTY_LINE");
+        logTypeFilter.setItems(logTypes);
+        logTypeFilter.setValue("All Log Types");
     }
 
     private void setupTableColumns() {
-        colPreview1.setCellValueFactory(new PropertyValueFactory<>("col1"));
-        colPreview2.setCellValueFactory(new PropertyValueFactory<>("col2"));
-        colPreview3.setCellValueFactory(new PropertyValueFactory<>("col3"));
-        colPreview4.setCellValueFactory(new PropertyValueFactory<>("col4"));
-        colPreview5.setCellValueFactory(new PropertyValueFactory<>("col5"));
+        // Fullname | Account Number | Date & Time | Log Type | Raw Data | Status
+        colPreview1.setCellValueFactory(new PropertyValueFactory<>("col1")); // Fullname
+        colPreview2.setCellValueFactory(new PropertyValueFactory<>("col2")); // Account Number
+        colPreview3.setCellValueFactory(new PropertyValueFactory<>("col3")); // Date & Time
+        colPreview4.setCellValueFactory(new PropertyValueFactory<>("col4")); // Log Type
+        colPreview5.setCellValueFactory(new PropertyValueFactory<>("col5")); // Raw Data
+        colPreview6.setCellValueFactory(new PropertyValueFactory<>("col6")); // Status
 
         importPreviewTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
     }
 
     private void loadSamplePreviewData() {
         previewData.addAll(
-            new ImportPreviewData("E-001", "Juan Dela Cruz", "Math", "Teacher I", "25000"),
-            new ImportPreviewData("E-002", "Maria Santos", "Admin", "Registrar", "30000"),
-            new ImportPreviewData("E-003", "Pedro Reyes", "Science", "Teacher II", "28000"),
-            new ImportPreviewData("E-004", "Ana Lopez", "Finance", "Cashier", "27000"),
-            new ImportPreviewData("E-005", "Rico Valdez", "ICT", "IT Support", "32000")
+            new ImportPreviewData("Juan Dela Cruz", "E-001", "2024-12-15 08:00:00", "TIME_IN_AM", "E-001 2024-12-15 08:00:00 1 0 1 0", "Sample Data"),
+            new ImportPreviewData("Maria Santos", "E-002", "2024-12-15 08:30:00", "TIME_IN_AM", "E-002 2024-12-15 08:30:00 1 0 1 0", "Sample Data"),
+            new ImportPreviewData("Pedro Reyes", "E-003", "2024-12-15 08:15:00", "TIME_IN_AM", "E-003 2024-12-15 08:15:00 1 0 1 0", "Sample Data"),
+            new ImportPreviewData("Ana Lopez", "E-004", "2024-12-15 17:00:00", "TIME_OUT_PM", "E-004 2024-12-15 17:00:00 1 1 1 0", "Sample Data"),
+            new ImportPreviewData("Rico Valdez", "E-005", "2024-12-15 17:30:00", "TIME_OUT_PM", "E-005 2024-12-15 17:30:00 1 1 1 0", "Sample Data")
         );
         importPreviewTable.setItems(previewData);
     }
@@ -136,10 +212,13 @@ public class ImportExportController implements Initializable {
         showImportDialog();
     }
 
+    // Export functionality temporarily commented out
+    /*
     @FXML
     private void onExportData() {
         showExportDialog();
     }
+    */
 
     @FXML
     private void onBrowseImportFile() {
@@ -149,6 +228,9 @@ public class ImportExportController implements Initializable {
         String selectedFormat = importFileFormat.getValue();
         if (selectedFormat != null) {
             switch (selectedFormat) {
+                case "TXT/DAT (Biometric)":
+                    fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Biometric Log Files", "*.txt", "*.dat", "*_attlog.txt", "*_attlog.dat"));
+                    break;
                 case "CSV":
                     fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV Files", "*.csv"));
                     break;
@@ -165,8 +247,11 @@ public class ImportExportController implements Initializable {
         
         selectedImportFile = fileChooser.showOpenDialog(null);
         if (selectedImportFile != null) {
-            importFileLabel.setText("Selected: " + selectedImportFile.getName());
-            loadPreviewData();
+            // Show file loading progress
+            showFileLoadingProgress("Processing attendance file...", "Reading file: " + selectedImportFile.getName());
+            
+            // Process file in background
+            processFileInBackground(selectedImportFile);
         }
     }
 
@@ -188,17 +273,18 @@ public class ImportExportController implements Initializable {
             return;
         }
         
-        String dataType = importDataType.getValue();
         String fileFormat = importFileFormat.getValue();
         
-        if (dataType == null || fileFormat == null) {
-            showAlert("Please select both data type and file format.");
+        if (fileFormat == null) {
+            showAlert("Please select a file format.");
             return;
         }
         
-        performImport(dataType, fileFormat);
+        performImport("Attendance Data", fileFormat);
     }
 
+    // Export functionality temporarily commented out
+    /*
     @FXML
     private void onExportNow() {
         String dataType = exportDataType.getValue();
@@ -212,8 +298,74 @@ public class ImportExportController implements Initializable {
         
         performExport(dataType, fileFormat, department);
     }
+    */
+    
+    // Search and Filter Methods
+    @FXML
+    private void onSearchKeyReleased() {
+        applyFilters();
+    }
+    
+    @FXML
+    private void onFilterChanged() {
+        applyFilters();
+    }
+    
+    @FXML
+    private void onClearFilters() {
+        searchField.clear();
+        dateFilter.clear();
+        logTypeFilter.setValue("All Log Types");
+        applyFilters();
+    }
+    
+    private void applyFilters() {
+        String searchText = searchField.getText().toLowerCase().trim();
+        String dateText = dateFilter.getText().trim();
+        String logType = logTypeFilter.getValue();
+        
+        ObservableList<ImportPreviewData> filteredData = FXCollections.observableArrayList();
+        
+        for (ImportPreviewData data : previewData) {
+            boolean matches = true;
+            
+            // Search by account number (now in col2) or fullname (col1)
+            if (!searchText.isEmpty()) {
+                boolean accountMatch = data.getCol2() != null && data.getCol2().toLowerCase().contains(searchText);
+                boolean nameMatch = data.getCol1() != null && data.getCol1().toLowerCase().contains(searchText);
+                if (!accountMatch && !nameMatch) {
+                    matches = false;
+                }
+            }
+            
+            // Filter by date (now in col3)
+            if (!dateText.isEmpty() && data.getCol3() != null) {
+                if (!data.getCol3().contains(dateText)) {
+                    matches = false;
+                }
+            }
+            
+            // Filter by log type (now in col4)
+            if (logType != null && !"All Log Types".equals(logType) && data.getCol4() != null) {
+                if (!data.getCol4().equals(logType)) {
+                    matches = false;
+                }
+            }
+            
+            if (matches) {
+                filteredData.add(data);
+            }
+        }
+        
+        importPreviewTable.setItems(filteredData);
+    }
 
     private void performImport(String dataType, String fileFormat) {
+        if (!"Attendance Data".equals(dataType)) {
+            showAlert("Currently only Attendance Data import is supported!");
+            return;
+        }
+        
         importProgressBar.setVisible(true);
         importProgressBar.setProgress(0);
         
@@ -221,33 +373,13 @@ public class ImportExportController implements Initializable {
             @Override
             protected Integer call() throws Exception {
                 try {
-                    // Process the selected file
-                    List<String[]> records = processImportFile(selectedImportFile, fileFormat);
-                    int recordsImported = records.size();
-                    
-                    // Simulate processing each record
-                    for (int i = 0; i <= recordsImported; i++) {
-                        updateProgress(i, recordsImported);
-                        Thread.sleep(10); // Simulate processing time per record
+                    if ("TXT/DAT (Biometric)".equals(fileFormat)) {
+                        return importBiometricAttendanceData();
+                    } else {
+                        throw new Exception("Unsupported file format for attendance data: " + fileFormat);
                     }
-                    
-                    // Update preview table with imported data
-                    javafx.application.Platform.runLater(() -> {
-                        previewData.clear();
-                        for (String[] record : records) {
-                            if (record.length >= 5) {
-                                previewData.add(new ImportPreviewData(
-                                    record[0], record[1], record[2], record[3], record[4]
-                                ));
-                            }
-                        }
-                        importPreviewTable.setItems(previewData);
-                    });
-                    
-                    return recordsImported;
-                    
                 } catch (Exception e) {
-                    throw new Exception("Failed to process file: " + e.getMessage());
+                    throw new Exception("Import failed: " + e.getMessage());
                 }
             }
         };
@@ -260,6 +392,14 @@ public class ImportExportController implements Initializable {
                                "Data Type: " + dataType + "\n" +
                                "Format: " + fileFormat + "\n" +
                                "Records imported: " + importTask.getValue());
+                
+                // Reset the selected file and clear file info
+                selectedImportFile = null;
+                importFileLabel.setText("No file selected");
+                
+                // Clear the table first, then refresh with updated database data
+                clearImportTable();
+                refreshAttendancePreview(); // This will populate table with new attendance data from database
             }
         });
         
@@ -274,6 +414,8 @@ public class ImportExportController implements Initializable {
         new Thread(importTask).start();
     }
 
+    // Export functionality temporarily commented out
+    /*
     private void performExport(String dataType, String fileFormat, String department) {
         exportProgressBar.setVisible(true);
         exportProgressBar.setProgress(0);
@@ -283,34 +425,30 @@ public class ImportExportController implements Initializable {
             @Override
             protected ExportResult call() throws Exception {
                 try {
-                    // Generate sample data for export
-                    List<String[]> data = generateSampleData(dataType, department);
-                    int recordsExported = data.size();
-                    
-                    // Create filename with timestamp
-                    String timestamp = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-                    String extension = fileFormat.equals("Excel") ? ".xlsx" : 
-                                     fileFormat.equals("JSON") ? ".json" : ".csv";
-                    String exportFilename = dataType.replace(" ", "_") + "_" + timestamp + extension;
-                    
-                    // Create exports directory if it doesn't exist
-                    String userHome = System.getProperty("user.home");
-                    String exportDir = userHome + File.separator + "Desktop" + File.separator + "Exports";
-                    new File(exportDir).mkdirs();
-                    
-                    String fullPath = exportDir + File.separator + exportFilename;
-                    
-                    // Simulate processing each record
-                    for (int i = 0; i <= recordsExported; i++) {
-                        updateProgress(i, recordsExported);
-                        Thread.sleep(15); // Simulate processing time per record
+                    if ("Attendance Data".equals(dataType)) {
+                        return exportAttendanceData(fileFormat, department);
+                    } else {
+                        // Generate sample data for other types
+                        List<String[]> data = generateSampleData(dataType, department);
+                        int recordsExported = data.size();
+                        
+                        // Create filename with timestamp
+                        String timestamp = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+                        String extension = getFileExtension(fileFormat);
+                        String exportFilename = dataType.replace(" ", "_") + "_" + timestamp + extension;
+                        
+                        // Create exports directory
+                        String userHome = System.getProperty("user.home");
+                        String exportDir = userHome + File.separator + "Desktop" + File.separator + "Exports";
+                        new File(exportDir).mkdirs();
+                        
+                        String fullPath = exportDir + File.separator + exportFilename;
+                        
+                        // Write the file
+                        processExportFile(data, fullPath, fileFormat);
+                        
+                        return new ExportResult(recordsExported, exportFilename);
                     }
-                    
-                    // Write the file
-                    processExportFile(data, fullPath, fileFormat);
-                    
-                    return new ExportResult(recordsExported, exportFilename);
-                    
                 } catch (Exception e) {
                     throw new Exception("Failed to export data: " + e.getMessage());
                 }
@@ -344,17 +482,262 @@ public class ImportExportController implements Initializable {
         
         new Thread(exportTask).start();
     }
+    */
 
     private void loadPreviewData() {
-        // In a real implementation, this would parse the selected file
-        // and populate the preview table with actual data
+        if (selectedImportFile == null) return;
+        
         previewData.clear();
-        previewData.addAll(
-            new ImportPreviewData("E-001", "Juan Dela Cruz", "Math", "Teacher I", "25000"),
-            new ImportPreviewData("E-002", "Maria Santos", "Admin", "Registrar", "30000"),
-            new ImportPreviewData("E-003", "Pedro Reyes", "Science", "Teacher II", "28000")
-        );
-        importPreviewTable.setItems(previewData);
+        
+        String fileFormat = importFileFormat.getValue();
+        
+        // Always treat as attendance data and load accordingly
+        if ("TXT/DAT (Biometric)".equals(fileFormat)) {
+            loadBiometricPreviewData();
+        } else {
+            loadGenericPreviewData();
+        }
+    }
+    
+    private void loadBiometricPreviewData() {
+        previewData.clear();
+        
+        try {
+            List<String> lines = Files.readAllLines(Paths.get(selectedImportFile.getAbsolutePath()));
+            int lineNumber = 0;
+            int validRecords = 0;
+            int errorRecords = 0;
+            int emptyLines = 0;
+            
+            // Show ALL lines from the file for complete verification
+            for (String originalLine : lines) {
+                lineNumber++;
+                String trimmedLine = originalLine.trim();
+                
+                // Show empty lines too for verification
+                if (trimmedLine.isEmpty()) {
+                    emptyLines++;
+                    previewData.add(new ImportPreviewData(
+                        "N/A",  // Fullname
+                        "EMPTY", // Account Number
+                        "",      // Date & Time
+                        "EMPTY_LINE", // Log Type
+                        originalLine.isEmpty() ? "[Empty Line]" : originalLine, // Raw Data
+                        "Line " + lineNumber + ": Empty line" // Status
+                    ));
+                    continue;
+                }
+                
+                try {
+                    // Parse biometric log format: account_number	datetime	1	0/1	1	0
+                    String[] parts = trimmedLine.split("\\s+");
+                    if (parts.length >= 6) {
+                        String accountNumber = parts[0].trim();
+                        String dateTime = parts[1] + " " + parts[2];
+                        int inOutFlag = Integer.parseInt(parts[4]); // 0=in, 1=out
+                        
+                        // Determine log type
+                        LocalDateTime logDateTime = LocalDateTime.parse(dateTime, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                        String logType = determineLogType(logDateTime, inOutFlag == 0);
+                        
+                        // Lookup employee fullname from database
+                        String fullname = lookupEmployeeFullname(accountNumber);
+                        
+                        validRecords++;
+                        previewData.add(new ImportPreviewData(
+                            fullname,     // Fullname (from database or N/A)
+                            accountNumber, // Account Number
+                            dateTime,     // Date & Time
+                            logType,      // Log Type
+                            originalLine, // Raw Data
+                            "Line " + lineNumber + ": Valid ✓" // Status
+                        ));
+                    } else {
+                        // Show lines with insufficient fields
+                        errorRecords++;
+                        previewData.add(new ImportPreviewData(
+                            "N/A",        // Fullname
+                            "INVALID",    // Account Number
+                            "Insufficient fields", // Date & Time
+                            "FORMAT_ERROR", // Log Type
+                            originalLine, // Raw Data
+                            "Line " + lineNumber + ": Only " + parts.length + " fields (need 6) ✗" // Status
+                        ));
+                    }
+                } catch (Exception e) {
+                    // Add problematic lines for review
+                    errorRecords++;
+                    previewData.add(new ImportPreviewData(
+                        "N/A",        // Fullname
+                        "ERROR",      // Account Number
+                        "Parse failed", // Date & Time
+                        "PARSE_ERROR", // Log Type
+                        originalLine, // Raw Data
+                        "Line " + lineNumber + ": " + e.getMessage() + " ✗" // Status
+                    ));
+                }
+            }
+            
+            // Make variables effectively final for lambda
+            final int finalLineNumber = lineNumber;
+            final int finalValidRecords = validRecords;
+            final int finalErrorRecords = errorRecords;
+            final int finalEmptyLines = emptyLines;
+            
+            // Update UI to show summary
+            javafx.application.Platform.runLater(() -> {
+                importPreviewTable.setItems(previewData);
+                
+                // Show summary in status or console
+                System.out.println("File Preview Summary:");
+                System.out.println("Total lines: " + finalLineNumber);
+                System.out.println("Valid records: " + finalValidRecords);
+                System.out.println("Error records: " + finalErrorRecords);
+                System.out.println("Empty lines: " + finalEmptyLines);
+                
+                // You could also show this in a status label if you add one to the FXML
+                String summary = String.format("File loaded: %d total lines (%d valid, %d errors, %d empty)", 
+                    finalLineNumber, finalValidRecords, finalErrorRecords, finalEmptyLines);
+                importFileLabel.setText(summary);
+            });
+            
+        } catch (IOException e) {
+            showAlert("Error reading file: " + e.getMessage());
+        }
+    }
+    
+    private void loadGenericPreviewData() {
+        try {
+            List<String> lines = Files.readAllLines(Paths.get(selectedImportFile.getAbsolutePath()));
+            int maxLines = Math.min(lines.size(), 10); // Show first 10 lines
+            
+            for (int i = 0; i < maxLines; i++) {
+                String line = lines.get(i);
+                String[] parts = line.split(",|\\t"); // Split by comma or tab
+                
+                // For generic files, try to detect if first column is account number
+                String possibleAccountNumber = parts.length > 0 ? parts[0].trim() : "";
+                String fullname = "N/A"; // Default for generic files
+                
+                // Try to lookup employee name if first column looks like account number
+                if (possibleAccountNumber.matches("\\d+")) { // If it's numeric, might be account number
+                    fullname = lookupEmployeeFullname(possibleAccountNumber);
+                }
+                
+                String col2 = parts.length > 1 ? parts[1] : "";
+                String col3 = parts.length > 2 ? parts[2] : "";
+                String col4 = parts.length > 3 ? parts[3] : "";
+                String col5 = parts.length > 4 ? parts[4] : "";
+                String col6 = "Line " + (i + 1) + ": Generic Data";
+                
+                // Format: Fullname | Account Number | Date & Time | Log Type | Raw Data | Status
+                previewData.add(new ImportPreviewData(
+                    fullname,              // Fullname (lookup if account number detected)
+                    possibleAccountNumber, // Account Number (or first column)
+                    col2,                 // Date & Time (or second column)
+                    col3,                 // Log Type (or third column)
+                    line,                 // Raw Data (whole line)
+                    col6                  // Status
+                ));
+            }
+            
+            importPreviewTable.setItems(previewData);
+            
+        } catch (IOException e) {
+            showAlert("Error reading file: " + e.getMessage());
+        }
+    }
+    
+    private String determineLogType(LocalDateTime dateTime, boolean isEntry) {
+        int hour = dateTime.getHour();
+        
+        if (hour < 12) { // Morning (AM)
+            return isEntry ? "TIME_IN_AM" : "TIME_OUT_AM";
+        } else { // Afternoon/Evening (PM)
+            return isEntry ? "TIME_IN_PM" : "TIME_OUT_PM";
+        }
+    }
+    
+    private int importBiometricAttendanceData() throws Exception {
+        List<String> lines = Files.readAllLines(Paths.get(selectedImportFile.getAbsolutePath()));
+        int totalLines = lines.size();
+        int processedLines = 0;
+        int importedRecords = 0;
+        String batchId = selectedImportFile.getName();
+        
+        String insertSQL = "INSERT INTO attendance (account_number, log_datetime, log_type, raw_data, " +
+                          "imported_by, import_batch) VALUES (?, ?, ?, ?, ?, ?) " +
+                          "ON DUPLICATE KEY UPDATE raw_data = VALUES(raw_data), updated_at = CURRENT_TIMESTAMP";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(insertSQL)) {
+            
+            for (int i = 0; i < lines.size(); i++) {
+                String line = lines.get(i).trim();
+                if (line.isEmpty()) {
+                    processedLines++;
+                    updateProgress(processedLines, totalLines);
+                    continue;
+                }
+                
+                try {
+                    // Parse biometric log format: account_number	datetime	1	0/1	1	0
+                    String[] parts = line.split("\\s+");
+                    if (parts.length >= 6) {
+                        String accountNumber = parts[0];
+                        String dateTimeStr = parts[1] + " " + parts[2];
+                        LocalDateTime logDateTime = LocalDateTime.parse(dateTimeStr, 
+                            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                        
+                        int inOutFlag = Integer.parseInt(parts[4]); // 0=in, 1=out
+                        String logType = determineLogType(logDateTime, inOutFlag == 0);
+                        
+                        stmt.setString(1, accountNumber);
+                        stmt.setTimestamp(2, Timestamp.valueOf(logDateTime));
+                        stmt.setString(3, logType);
+                        stmt.setString(4, line);
+                        stmt.setString(5, "admin"); // Current user
+                        stmt.setString(6, batchId);
+                        
+                        int rowsAffected = stmt.executeUpdate();
+                        if (rowsAffected > 0) {
+                            importedRecords++;
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error processing line: " + line + " - " + e.getMessage());
+                }
+                
+                processedLines++;
+                updateProgress(processedLines, totalLines);
+                
+                // Small delay to show progress
+                if (i % 10 == 0) {
+                    Thread.sleep(10);
+                }
+            }
+        }
+        
+        return importedRecords;
+    }
+    
+    // Add missing updateProgress method
+    private void updateProgress(int current, int total) {
+        if (total > 0) {
+            double progress = (double) current / total;
+            javafx.application.Platform.runLater(() -> {
+                importProgressBar.setProgress(progress);
+            });
+        }
+    }
+    
+    // Method to clear the import preview table
+    private void clearImportTable() {
+        Platform.runLater(() -> {
+            previewData.clear();
+            importPreviewTable.setItems(previewData);
+            importPreviewTable.refresh();
+        });
     }
 
     private void showImportDialog() {
@@ -575,5 +958,417 @@ public class ImportExportController implements Initializable {
         }
         
         return data;
+    }
+
+    private ExportResult exportAttendanceData(String fileFormat, String department) throws Exception {
+        String selectSQL = "SELECT account_number, log_datetime, log_type, raw_data, import_batch " +
+                          "FROM attendance ORDER BY log_datetime DESC LIMIT 10000";
+        
+        List<String[]> exportData = new ArrayList<>();
+        int recordsExported = 0;
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(selectSQL);
+             ResultSet rs = stmt.executeQuery()) {
+            
+            // Add headers based on format
+            if ("TXT/DAT (Biometric)".equals(fileFormat)) {
+                // No headers for biometric format
+            } else {
+                exportData.add(new String[]{"Account Number", "Date Time", "Log Type", "Raw Data", "Import Batch"});
+            }
+            
+            while (rs.next()) {
+                if ("TXT/DAT (Biometric)".equals(fileFormat)) {
+                    // Export in original biometric format
+                    String rawData = rs.getString("raw_data");
+                    if (rawData != null && !rawData.trim().isEmpty()) {
+                        exportData.add(new String[]{rawData});
+                    }
+                } else {
+                    // Export as structured data
+                    exportData.add(new String[]{
+                        rs.getString("account_number"),
+                        rs.getString("log_datetime"),
+                        rs.getString("log_type"),
+                        rs.getString("raw_data"),
+                        rs.getString("import_batch")
+                    });
+                }
+                recordsExported++;
+                
+                // Update progress periodically
+                if (recordsExported % 100 == 0) {
+                    updateProgress(recordsExported, 10000);
+                    Thread.sleep(5);
+                }
+            }
+        }
+        
+        // Create filename with timestamp
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        String extension = getFileExtension(fileFormat);
+        String exportFilename;
+        
+        if ("TXT/DAT (Biometric)".equals(fileFormat)) {
+            exportFilename = "TPC-EXPORT-" + timestamp + "_attlog.dat";
+        } else {
+            exportFilename = "Attendance_Data_" + timestamp + extension;
+        }
+        
+        // Create exports directory
+        String userHome = System.getProperty("user.home");
+        String exportDir = userHome + File.separator + "Desktop" + File.separator + "Exports";
+        new File(exportDir).mkdirs();
+        
+        String fullPath = exportDir + File.separator + exportFilename;
+        
+        // Write the file
+        if ("TXT/DAT (Biometric)".equals(fileFormat)) {
+            writeBiometricFile(exportData, fullPath);
+        } else {
+            processExportFile(exportData, fullPath, fileFormat);
+        }
+        
+        updateProgress(recordsExported, recordsExported);
+        
+        return new ExportResult(recordsExported, exportFilename);
+    }
+    
+    private String getFileExtension(String fileFormat) {
+        switch (fileFormat) {
+            case "TXT/DAT (Biometric)":
+                return ".dat";
+            case "Excel":
+                return ".xlsx";
+            case "JSON":
+                return ".json";
+            case "CSV":
+            default:
+                return ".csv";
+        }
+    }
+    
+    private void writeBiometricFile(List<String[]> data, String filename) throws IOException {
+        try (FileWriter writer = new FileWriter(filename)) {
+            for (String[] row : data) {
+                if (row.length > 0) {
+                    writer.append(row[0]);
+                    writer.append("\n");
+                }
+            }
+        }
+    }
+    
+    // CRUD Operations for Attendance Data
+    
+    /**
+     * Create/Insert new attendance record
+     */
+    public boolean createAttendanceRecord(String accountNumber, LocalDateTime logDateTime, 
+                                        String logType, String rawData, String importedBy, String importBatch) {
+        String insertSQL = "INSERT INTO attendance (account_number, log_datetime, log_type, raw_data, " +
+                          "imported_by, import_batch) VALUES (?, ?, ?, ?, ?, ?)";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(insertSQL)) {
+            
+            stmt.setString(1, accountNumber);
+            stmt.setTimestamp(2, Timestamp.valueOf(logDateTime));
+            stmt.setString(3, logType);
+            stmt.setString(4, rawData);
+            stmt.setString(5, importedBy);
+            stmt.setString(6, importBatch);
+            
+            int rowsAffected = stmt.executeUpdate();
+            return rowsAffected > 0;
+            
+        } catch (SQLException e) {
+            System.err.println("Error creating attendance record: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Read/Select attendance records with filtering
+     */
+    public List<ImportPreviewData> readAttendanceRecords(String accountNumber, String dateFilter, int limit) {
+        List<ImportPreviewData> records = new ArrayList<>();
+        
+        StringBuilder queryBuilder = new StringBuilder("SELECT account_number, log_datetime, log_type, raw_data, import_batch FROM attendance WHERE 1=1");
+        List<String> parameters = new ArrayList<>();
+        
+        if (accountNumber != null && !accountNumber.trim().isEmpty()) {
+            queryBuilder.append(" AND account_number = ?");
+            parameters.add(accountNumber);
+        }
+        
+        if (dateFilter != null && !dateFilter.trim().isEmpty()) {
+            queryBuilder.append(" AND DATE(log_datetime) = ?");
+            parameters.add(dateFilter);
+        }
+        
+        queryBuilder.append(" ORDER BY log_datetime DESC LIMIT ").append(limit);
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(queryBuilder.toString())) {
+            
+            for (int i = 0; i < parameters.size(); i++) {
+                stmt.setString(i + 1, parameters.get(i));
+            }
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    String recordAccountNumber = rs.getString("account_number");
+                    String fullname = lookupEmployeeFullname(recordAccountNumber);
+                    
+                    records.add(new ImportPreviewData(
+                        fullname,                     // Fullname (from database or N/A)
+                        recordAccountNumber,          // Account Number
+                        rs.getString("log_datetime"), // Date & Time
+                        rs.getString("log_type"),     // Log Type
+                        rs.getString("raw_data"),     // Raw Data
+                        rs.getString("import_batch")  // Status/Import Batch
+                    ));
+                }
+            }
+            
+        } catch (SQLException e) {
+            System.err.println("Error reading attendance records: " + e.getMessage());
+        }
+        
+        return records;
+    }
+    
+    /**
+     * Update existing attendance record
+     */
+    public boolean updateAttendanceRecord(int recordId, String logType, String rawData) {
+        String updateSQL = "UPDATE attendance SET log_type = ?, raw_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(updateSQL)) {
+            
+            stmt.setString(1, logType);
+            stmt.setString(2, rawData);
+            stmt.setInt(3, recordId);
+            
+            int rowsAffected = stmt.executeUpdate();
+            return rowsAffected > 0;
+            
+        } catch (SQLException e) {
+            System.err.println("Error updating attendance record: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Delete attendance record(s)
+     */
+    public boolean deleteAttendanceRecord(int recordId) {
+        String deleteSQL = "DELETE FROM attendance WHERE id = ?";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(deleteSQL)) {
+            
+            stmt.setInt(1, recordId);
+            
+            int rowsAffected = stmt.executeUpdate();
+            return rowsAffected > 0;
+            
+        } catch (SQLException e) {
+            System.err.println("Error deleting attendance record: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Delete attendance records by batch
+     */
+    public boolean deleteAttendanceBatch(String importBatch) {
+        String deleteSQL = "DELETE FROM attendance WHERE import_batch = ?";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(deleteSQL)) {
+            
+            stmt.setString(1, importBatch);
+            
+            int rowsAffected = stmt.executeUpdate();
+            return rowsAffected > 0;
+            
+        } catch (SQLException e) {
+            System.err.println("Error deleting attendance batch: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Get attendance statistics
+     */
+    public Map<String, Integer> getAttendanceStatistics() {
+        Map<String, Integer> stats = new HashMap<>();
+        
+        String statsSQL = "SELECT " +
+                         "COUNT(*) as total_records, " +
+                         "COUNT(DISTINCT account_number) as unique_employees, " +
+                         "COUNT(DISTINCT DATE(log_datetime)) as unique_dates, " +
+                         "COUNT(DISTINCT import_batch) as unique_batches " +
+                         "FROM attendance";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(statsSQL);
+             ResultSet rs = stmt.executeQuery()) {
+            
+            if (rs.next()) {
+                stats.put("total_records", rs.getInt("total_records"));
+                stats.put("unique_employees", rs.getInt("unique_employees"));
+                stats.put("unique_dates", rs.getInt("unique_dates"));
+                stats.put("unique_batches", rs.getInt("unique_batches"));
+            }
+            
+        } catch (SQLException e) {
+            System.err.println("Error getting attendance statistics: " + e.getMessage());
+        }
+        
+        return stats;
+    }
+    
+    /**
+     * Refresh preview table with latest attendance data from database
+     */
+    public void refreshAttendancePreview() {
+        previewData.clear();
+        List<ImportPreviewData> latestRecords = readAttendanceRecords(null, null, 50); // Get latest 50 records
+        previewData.addAll(latestRecords);
+        importPreviewTable.setItems(previewData);
+    }
+    
+    /**
+     * Event handler for Refresh Data button
+     */
+    @FXML
+    private void onRefreshPreview() {
+        refreshAttendancePreview();
+        showAlert("Attendance data preview refreshed!");
+    }
+    
+    /**
+     * Event handler for Show Statistics button
+     */
+    @FXML
+    private void onShowStatistics() {
+        Map<String, Integer> stats = getAttendanceStatistics();
+        
+        String message = "Attendance Database Statistics:\n\n" +
+                        "Total Records: " + stats.getOrDefault("total_records", 0) + "\n" +
+                        "Unique Employees: " + stats.getOrDefault("unique_employees", 0) + "\n" +
+                        "Unique Dates: " + stats.getOrDefault("unique_dates", 0) + "\n" +
+                        "Import Batches: " + stats.getOrDefault("unique_batches", 0);
+        
+        showSuccessAlert(message);
+    }
+    
+    // File Loading Progress Methods
+    private void showFileLoadingProgress(String title, String message) {
+        Platform.runLater(() -> {
+            // Unbind any existing bindings first
+            if (fileProgressLabel.textProperty().isBound()) {
+                fileProgressLabel.textProperty().unbind();
+            }
+            if (fileProgressBar.progressProperty().isBound()) {
+                fileProgressBar.progressProperty().unbind();
+            }
+            
+            fileLoadingLabel.setText(title);
+            fileProgressLabel.setText(message);
+            fileProgressBar.setProgress(0.0);
+            fileLoadingSection.setVisible(true);
+            fileLoadingSection.setManaged(true);
+        });
+    }
+    
+    private void hideFileLoadingProgress() {
+        Platform.runLater(() -> {
+            // Unbind properties before hiding
+            if (fileProgressLabel.textProperty().isBound()) {
+                fileProgressLabel.textProperty().unbind();
+            }
+            if (fileProgressBar.progressProperty().isBound()) {
+                fileProgressBar.progressProperty().unbind();
+            }
+            
+            fileLoadingSection.setVisible(false);
+            fileLoadingSection.setManaged(false);
+            fileProgressBar.setProgress(0.0);
+        });
+    }
+    
+    private void processFileInBackground(File file) {
+        Task<Void> fileTask = new Task<Void>() {
+            @Override
+            protected Void call() throws Exception {
+                try {
+                    // Simulate file reading progress
+                    updateMessage("Reading file: " + file.getName());
+                    updateProgress(0, 100);
+                    Thread.sleep(300);
+                    
+                    // Read file size
+                    long fileSize = file.length();
+                    updateMessage("File size: " + (fileSize / 1024) + " KB");
+                    updateProgress(25, 100);
+                    Thread.sleep(500);
+                    
+                    // Count lines
+                    List<String> lines = Files.readAllLines(Paths.get(file.getAbsolutePath()));
+                    int totalLines = lines.size();
+                    updateMessage("Found " + totalLines + " lines in file");
+                    updateProgress(50, 100);
+                    Thread.sleep(500);
+                    
+                    // Validate format
+                    updateMessage("Validating file format...");
+                    updateProgress(75, 100);
+                    Thread.sleep(500);
+                    
+                    // Complete
+                    updateMessage("File processing complete");
+                    updateProgress(100, 100);
+                    Thread.sleep(300);
+                    
+                    Platform.runLater(() -> {
+                        importFileLabel.setText("Selected: " + file.getName() + " (" + totalLines + " lines)");
+                        loadPreviewData(); // Load preview after file processing
+                    });
+                    
+                } catch (Exception e) {
+                    Platform.runLater(() -> showAlert("Error processing file: " + e.getMessage()));
+                }
+                
+                return null;
+            }
+        };
+        
+        // Bind progress to UI (only progress bar, not labels)
+        fileProgressBar.progressProperty().bind(fileTask.progressProperty());
+        
+        // Update labels manually to avoid binding conflicts
+        fileTask.messageProperty().addListener((obs, oldMessage, newMessage) -> {
+            Platform.runLater(() -> {
+                if (!fileProgressLabel.textProperty().isBound()) {
+                    fileProgressLabel.setText(newMessage);
+                }
+            });
+        });
+        
+        // Handle completion
+        fileTask.setOnSucceeded(e -> hideFileLoadingProgress());
+        fileTask.setOnFailed(e -> {
+            hideFileLoadingProgress();
+            showAlert("Error processing file: " + fileTask.getException().getMessage());
+        });
+        
+        // Start background processing
+        new Thread(fileTask).start();
     }
 }

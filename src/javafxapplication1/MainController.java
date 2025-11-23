@@ -71,13 +71,9 @@ public class MainController implements Initializable {
     private Button currentActiveButton;
     
     // Database connection
-    private static final String DB_URL = "jdbc:mysql://127.0.0.1:3307/payroll";
-    private static final String DB_USER = "root";
-    private static final String DB_PASSWORD = "berong123!";
-    
-//    private static final String DB_URL = "jdbc:mysql://127.0.0.1:3306/payroll";
-//    private static final String DB_USER = "tpc_user";
-//    private static final String DB_PASSWORD = "tpcuser123!";
+    private static final String DB_URL = DatabaseConfig.getDbUrl();
+    private static final String DB_USER = DatabaseConfig.getDbUser();
+    private static final String DB_PASSWORD = DatabaseConfig.getDbPassword();
     private Connection connection;
     private static final Logger logger = Logger.getLogger(MainController.class.getName());
 
@@ -100,6 +96,18 @@ public class MainController implements Initializable {
     
     private void performLogout() {
         try {
+            // Log logout event before clearing session
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                String clientIP = SecurityLogger.getClientIP();
+                SecurityLogger.logSecurityEvent(
+                    "LOGOUT", 
+                    "LOW", 
+                    currentUser,
+                    "User logged out successfully from " + clientIP
+                );
+            }
+            
             // Clear any session data (you can add more session clearing here)
             clearUserSession();
             
@@ -288,7 +296,20 @@ public class MainController implements Initializable {
             
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error setting up permission-based menu visibility", e);
-            hideAllMenuItems();
+            
+            // Get current user for fallback behavior
+            SessionManager sessionManager = SessionManager.getInstance();
+            if (sessionManager.isLoggedIn()) {
+                String currentUser = sessionManager.getCurrentUser();
+                if ("admin".equals(currentUser)) {
+                    logger.info("Database error but admin user detected, showing all menu items");
+                    showAllMenuItems();
+                } else {
+                    hideAllMenuItems();
+                }
+            } else {
+                hideAllMenuItems();
+            }
         }
     }
     
@@ -296,8 +317,10 @@ public class MainController implements Initializable {
         try {
             Class.forName("com.mysql.cj.jdbc.Driver");
             connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+            logger.info("Database connection established successfully");
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error initializing database connection", e);
+            connection = null;
         }
     }
     
@@ -353,6 +376,13 @@ public class MainController implements Initializable {
     
     private boolean hasUserPermission(String username, String permissionName) {
         try {
+            // Check if database connection is available
+            if (connection == null) {
+                logger.warning("Database connection not available, defaulting to admin permissions for user: " + username);
+                // Default to giving admin users all permissions if database is not available
+                return username != null && username.equals("admin");
+            }
+            
             // Get user's role from database
             String getRoleQuery = "SELECT role FROM users WHERE username = ?";
             PreparedStatement getRoleStmt = connection.prepareStatement(getRoleQuery);
@@ -383,7 +413,8 @@ public class MainController implements Initializable {
             
         } catch (SQLException e) {
             logger.log(Level.SEVERE, "Error checking user permission", e);
-            return false;
+            // If database error occurs, default to admin permissions for admin user
+            return username != null && username.equals("admin");
         }
     }
     
@@ -399,6 +430,20 @@ public class MainController implements Initializable {
         setNodeVisibility(govRemitBtn, false);
         setNodeVisibility(userManagementBtn, false);
         setNodeVisibility(userAccessBtn, false);
+    }
+    
+    private void showAllMenuItems() {
+        // Show all menu items - used as fallback for admin users when database is unavailable
+        setNodeVisibility(employeeMgmtBtn, true);
+        setNodeVisibility(payrollProcessingBtn, true);
+        setNodeVisibility(payrollGeneratorBtn, true);
+        setNodeVisibility(reportsBtn, true);
+        setNodeVisibility(importExportBtn, true);
+        setNodeVisibility(historyBtn, true);
+        setNodeVisibility(securityBtn, true);
+        setNodeVisibility(govRemitBtn, true);
+        setNodeVisibility(userManagementBtn, true);
+        setNodeVisibility(userAccessBtn, true);
     }
     
     /**

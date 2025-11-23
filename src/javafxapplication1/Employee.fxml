@@ -31,8 +31,6 @@
 <children>
 <Label text="Search:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
 <TextField fx:id="searchField" promptText="Search employee name or ID" prefWidth="250.0" style="-fx-background-radius: 6;" />
-<Label text="Department:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-<ComboBox fx:id="departmentFilter" promptText="All Departments" prefWidth="150.0" style="-fx-background-radius: 6;" />
 <Button text="Search" onAction="#onSearch" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
 <Button text="Edit" onAction="#onEdit" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
 <Button text="Delete" onAction="#onDelete" style="-fx-background-color: #d32f2f; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
@@ -45,10 +43,10 @@
 <!-- Employee Table -->
 <TableView fx:id="table" prefHeight="400.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;" VBox.vgrow="ALWAYS">
 <columns>
-<TableColumn fx:id="colId" text="Employee ID" minWidth="120.0" />
+<TableColumn fx:id="colId" text="ID" minWidth="120.0" />
+<TableColumn fx:id="colAccountNumber" text="Account Number" minWidth="150.0" />
 <TableColumn fx:id="colName" text="Full Name" minWidth="200.0" />
 <TableColumn fx:id="colPosition" text="Position" minWidth="150.0" />
-<TableColumn fx:id="colDepartment" text="Department" minWidth="150.0" />
 <TableColumn fx:id="colSalary" text="Salary" minWidth="120.0" />
 </columns>
 <effect>

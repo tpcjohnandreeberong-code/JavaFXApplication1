@@ -107,7 +107,7 @@
 <PasswordField fx:id="newPasswordField" promptText="Enter new password" style="-fx-background-radius: 6; -fx-border-radius: 6; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-padding: 8;" GridPane.columnIndex="3" GridPane.rowIndex="0" />
 
 <!-- Confirm Password -->
-<Label text="Confirm Password:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-font-size: 14px;" GridPane.columnIndex="0" GridPane.rowIndex="1" />
+<Label text="Confirm New Password:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-font-size: 14px;" GridPane.columnIndex="0" GridPane.rowIndex="1" />
 <PasswordField fx:id="confirmPasswordField" promptText="Confirm new password" style="-fx-background-radius: 6; -fx-border-radius: 6; -fx-border-color: #c8e6c9; -fx-focus-color: #66bb6a; -fx-padding: 8;" GridPane.columnIndex="1" GridPane.rowIndex="1" />
 
 <!-- Password Requirements -->

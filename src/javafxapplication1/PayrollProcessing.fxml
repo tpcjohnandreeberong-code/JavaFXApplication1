@@ -36,9 +36,11 @@
 <HBox alignment="CENTER_LEFT" spacing="10.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;">
 <children>
 <Label text="Filter:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-<TextField fx:id="searchField" promptText="Search employee name or ID" prefWidth="250.0" style="-fx-background-radius: 6;" />
-<Label text="Department:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-<ComboBox fx:id="departmentFilter" promptText="All Departments" prefWidth="150.0" style="-fx-background-radius: 6;" />
+<TextField fx:id="searchField" promptText="Search employee name or ID" prefWidth="200.0" style="-fx-background-radius: 6;" />
+<Label text="Month:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
+<ComboBox fx:id="monthFilter" promptText="Select Month" prefWidth="140.0" style="-fx-background-radius: 6;" />
+<Label text="Year:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
+<ComboBox fx:id="yearFilter" promptText="Select Year" prefWidth="110.0" style="-fx-background-radius: 6;" />
 <Button text="Search" onAction="#onSearch" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
 <Button text="View Computation" onAction="#onViewComputation" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
 <Button text="Export Payroll" onAction="#onExportPayroll" style="-fx-background-color: #f57c00; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
@@ -55,8 +57,7 @@
 <TableView fx:id="payrollTable" prefHeight="400.0" style="-fx-background-color: transparent;" VBox.vgrow="ALWAYS">
 <columns>
 <TableColumn fx:id="colEmployeeId" text="Employee ID" prefWidth="100.0" />
-<TableColumn fx:id="colEmployeeName" text="Employee Name" prefWidth="200.0" />
-<TableColumn fx:id="colDepartment" text="Department" prefWidth="150.0" />
+<TableColumn fx:id="colEmployeeName" text="Employee Name" prefWidth="250.0" />
 <TableColumn fx:id="colPosition" text="Position" prefWidth="150.0" />
 <TableColumn fx:id="colBasicSalary" text="Basic Salary" prefWidth="120.0" />
 <TableColumn fx:id="colOvertime" text="Overtime" prefWidth="100.0" />
