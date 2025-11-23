@@ -13,9 +13,9 @@ public class DatabaseConfig {
     private static Properties properties;
     
     // Default values as fallback
-    private static final String DEFAULT_DB_URL = "jdbc:mysql://127.0.0.1:3306/payroll";
-    private static final String DEFAULT_DB_USER = "tpc_user";
-    private static final String DEFAULT_DB_PASSWORD = "tpcuser123!";
+    private static final String DEFAULT_DB_URL = "jdbc:mysql://127.0.0.1:3307/payroll";
+    private static final String DEFAULT_DB_USER = "root";
+    private static final String DEFAULT_DB_PASSWORD = "berong123!";
     
     static {
         loadProperties();
