@@ -2,6 +2,9 @@ package javafxapplication1;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Properties;
 
 /**
@@ -15,7 +18,7 @@ public class DatabaseConfig {
     // Default values as fallback
     private static final String DEFAULT_DB_URL = "jdbc:mysql://127.0.0.1:3307/payroll";
     private static final String DEFAULT_DB_USER = "root";
-    private static final String DEFAULT_DB_PASSWORD = "berong123!";
+    private static final String DEFAULT_DB_PASSWORD = "admin1234a";
     
     static {
         loadProperties();
@@ -51,6 +54,16 @@ public class DatabaseConfig {
     // Method to reload configuration if needed
     public static void reloadConfiguration() {
         loadProperties();
+    }
+    
+    // Method to get database connection
+    public static Connection getConnection() throws SQLException {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            return DriverManager.getConnection(getDbUrl(), getDbUser(), getDbPassword());
+        } catch (ClassNotFoundException e) {
+            throw new SQLException("MySQL JDBC Driver not found", e);
+        }
     }
     
     // Method to display current configuration (without password)

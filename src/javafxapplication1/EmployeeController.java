@@ -128,7 +128,21 @@ public class EmployeeController implements Initializable {
         }
         
         try {
-            String query = "SELECT id, account_number, full_name, position, salary FROM employees ORDER BY id";
+            String query = "SELECT \n" +
+            "    e.id,\n" +
+            "    e.account_number,\n" +
+            "    e.full_name,\n" +
+            "    e.position,\n" +
+            "\n" +
+            "    sr.monthly_salary AS salary,\n" +
+            "    sr.rate_per_day,\n" +
+            "    sr.half_day_rate,\n" +
+            "    sr.rate_per_minute\n" +
+            "\n" +
+            "FROM employees e\n" +
+            "LEFT JOIN salary_reference sr\n" +
+            "    ON e.salary_ref_id = sr.id\n" +
+            "ORDER BY e.id;";
             PreparedStatement stmt = connection.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             

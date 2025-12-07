@@ -63,6 +63,11 @@ public class MainController implements Initializable {
     @FXML private Button historyBtn;
     @FXML private Button securityBtn;
     @FXML private Button govRemitBtn;
+    @FXML private Button salaryReferenceBtn;
+    @FXML private Button attendanceProcessorBtn;
+    @FXML private Button loanManagementBtn;
+    @FXML private Button governmentContributionsBtn;
+    @FXML private Button systemSettingsBtn;
     @FXML private Button userManagementBtn;
     @FXML private Button userAccessBtn;
     @FXML private MenuButton userMenuButton;
@@ -242,9 +247,29 @@ public class MainController implements Initializable {
         setCenterContent("/javafxapplication1/SecurityMaintenance.fxml"); 
         setActiveMenuButton(securityBtn);
     }
-    @FXML private void openGovernmentRemittances() { 
-        setCenterContent("/javafxapplication1/GovernmentRemittances.fxml"); 
-        setActiveMenuButton(govRemitBtn);
+    // @FXML private void openGovernmentRemittances() { 
+    //     setCenterContent("/javafxapplication1/GovernmentRemittances.fxml"); 
+    //     setActiveMenuButton(govRemitBtn);
+    // }
+    @FXML private void openSalaryReference() { 
+        setCenterContent("/javafxapplication1/SalaryReference.fxml"); 
+        setActiveMenuButton(salaryReferenceBtn);
+    }
+    @FXML private void openAttendanceProcessor() { 
+        setCenterContent("/javafxapplication1/AttendanceProcessor.fxml"); 
+        setActiveMenuButton(attendanceProcessorBtn);
+    }
+    @FXML private void openLoanManagement() { 
+        setCenterContent("/javafxapplication1/LoanManagement.fxml"); 
+        setActiveMenuButton(loanManagementBtn);
+    }
+    @FXML private void openGovernmentContributions() { 
+        setCenterContent("/javafxapplication1/GovernmentContributions.fxml"); 
+        setActiveMenuButton(governmentContributionsBtn);
+    }
+    @FXML private void openSystemSettings() { 
+        setCenterContent("/javafxapplication1/SystemSettings.fxml"); 
+        setActiveMenuButton(systemSettingsBtn);
     }
     @FXML private void openUserManagement() { 
         setCenterContent("/javafxapplication1/UserManagement.fxml"); 
@@ -339,6 +364,11 @@ public class MainController implements Initializable {
             boolean historyView = hasUserPermission(username, "history.view");
             boolean securityView = hasUserPermission(username, "security.view");
             boolean govRemitView = hasUserPermission(username, "gov_remit.view");
+            boolean salaryRefView = hasUserPermission(username, "salary_ref.view");
+            boolean attendanceProcessView = hasUserPermission(username, "attendance_process.view");
+            boolean loanMgmtView = hasUserPermission(username, "loan_mgmt.view");
+            boolean govContribView = hasUserPermission(username, "gov_contrib.view");
+            boolean systemSettingsView = hasUserPermission(username, "system_settings.view");
             boolean userMgmtView = hasUserPermission(username, "user_mgmt.view");
             boolean userAccessView = hasUserPermission(username, "user_access.view");
             
@@ -351,6 +381,11 @@ public class MainController implements Initializable {
             setNodeVisibility(historyBtn, historyView);
             setNodeVisibility(securityBtn, securityView);
             setNodeVisibility(govRemitBtn, govRemitView);
+            setNodeVisibility(salaryReferenceBtn, salaryRefView);
+            setNodeVisibility(attendanceProcessorBtn, attendanceProcessView);
+            setNodeVisibility(loanManagementBtn, loanMgmtView);
+            setNodeVisibility(governmentContributionsBtn, govContribView);
+            setNodeVisibility(systemSettingsBtn, systemSettingsView);
             setNodeVisibility(userManagementBtn, userMgmtView);
             setNodeVisibility(userAccessBtn, userAccessView);
             
@@ -428,6 +463,11 @@ public class MainController implements Initializable {
         setNodeVisibility(historyBtn, false);
         setNodeVisibility(securityBtn, false);
         setNodeVisibility(govRemitBtn, false);
+        setNodeVisibility(salaryReferenceBtn, false);
+        setNodeVisibility(attendanceProcessorBtn, false);
+        setNodeVisibility(loanManagementBtn, false);
+        setNodeVisibility(governmentContributionsBtn, false);
+        setNodeVisibility(systemSettingsBtn, false);
         setNodeVisibility(userManagementBtn, false);
         setNodeVisibility(userAccessBtn, false);
     }
@@ -442,6 +482,11 @@ public class MainController implements Initializable {
         setNodeVisibility(historyBtn, true);
         setNodeVisibility(securityBtn, true);
         setNodeVisibility(govRemitBtn, true);
+        setNodeVisibility(salaryReferenceBtn, true);
+        setNodeVisibility(attendanceProcessorBtn, true);
+        setNodeVisibility(loanManagementBtn, true);
+        setNodeVisibility(governmentContributionsBtn, true);
+        setNodeVisibility(systemSettingsBtn, true);
         setNodeVisibility(userManagementBtn, true);
         setNodeVisibility(userAccessBtn, true);
     }

@@ -106,8 +106,11 @@ public class PayrollProcessingController implements Initializable {
             "All Months", "January", "February", "March", "April", "May", "June",
             "July", "August", "September", "October", "November", "December"
         ));
-        // Set current month as default
-        monthFilter.setValue(now.getMonth().toString());
+        // Set current month as default - convert to title case
+        String currentMonth = now.getMonth().toString();
+        String titleCaseMonth = currentMonth.substring(0, 1).toUpperCase() + 
+                               currentMonth.substring(1).toLowerCase();
+        monthFilter.setValue(titleCaseMonth);
         
         // Initialize year filter (current year and previous/next few years)
         ObservableList<String> yearList = FXCollections.observableArrayList();
@@ -212,10 +215,12 @@ public class PayrollProcessingController implements Initializable {
     private void updateDateFilters(LocalDate selectedDate) {
         // Update month and year filters when date picker changes
         String monthName = selectedDate.getMonth().toString();
+        String titleCaseMonth = monthName.substring(0, 1).toUpperCase() + 
+                               monthName.substring(1).toLowerCase();
         String year = String.valueOf(selectedDate.getYear());
         
         // Update filters without triggering listeners temporarily
-        monthFilter.setValue(monthName);
+        monthFilter.setValue(titleCaseMonth);
         yearFilter.setValue(year);
         
         // Update end date picker if start date changes
@@ -278,6 +283,9 @@ public class PayrollProcessingController implements Initializable {
                 entry.setNetPay(rs.getDouble("net_pay"));
                 entry.setStatus(rs.getString("status"));
                 
+                // Calculate individual deductions for detailed view
+                calculateIndividualDeductions(entry);
+                
                 allData.add(entry);
             }
         } catch (SQLException e) {
@@ -301,7 +309,10 @@ public class PayrollProcessingController implements Initializable {
             boolean matchesMonth = "All Months".equals(selectedMonth);
             if (!matchesMonth && entry.getPayPeriodStart() != null) {
                 LocalDate startDate = LocalDate.parse(entry.getPayPeriodStart());
-                matchesMonth = startDate.getMonth().toString().equals(selectedMonth);
+                String entryMonth = startDate.getMonth().toString();
+                String titleCaseEntryMonth = entryMonth.substring(0, 1).toUpperCase() + 
+                                           entryMonth.substring(1).toLowerCase();
+                matchesMonth = titleCaseEntryMonth.equals(selectedMonth);
             }
             
             // Check year filter
@@ -345,44 +356,121 @@ public class PayrollProcessingController implements Initializable {
         Task<String> generateTask = new Task<String>() {
             @Override
             protected String call() throws Exception {
-                String result = "No result";
+                int generatedCount = 0;
+                int skippedCount = 0;
                 
-                // Call the stored procedure sp_generate_payroll
-                String sql = "{CALL sp_generate_payroll(?, ?, ?)}";
-                
-                try (Connection conn = getConnection();
-                     CallableStatement stmt = conn.prepareCall(sql)) {
+                try (Connection conn = getConnection()) {
+                    // Get all active employees with their salary information
+                    String employeeSQL = """
+                        SELECT e.id, e.account_number, e.full_name, e.position, 
+                               sr.monthly_salary, sr.rate_per_day, sr.half_day_rate, sr.rate_per_minute
+                        FROM employees e
+                        LEFT JOIN salary_reference sr ON e.salary_ref_id = sr.id
+                        WHERE e.status = 'Active'
+                        ORDER BY e.full_name
+                        """;
                     
-                    stmt.setDate(1, Date.valueOf(startDate));
-                    stmt.setDate(2, Date.valueOf(endDate));
-                    stmt.setString(3, "Admin"); // processed_by parameter
-                    
-                    boolean hasResults = stmt.execute();
-                    
-                    // Check if stored procedure returns result sets
-                    if (hasResults) {
-                        try (ResultSet rs = stmt.getResultSet()) {
-                            if (rs.next()) {
-                                result = rs.getString(1); // Get the result message
+                    try (PreparedStatement employeeStmt = conn.prepareStatement(employeeSQL)) {
+                        ResultSet employeeRs = employeeStmt.executeQuery();
+                        
+                        while (employeeRs.next()) {
+                            int employeeId = employeeRs.getInt("id");
+                            String accountNumber = employeeRs.getString("account_number");
+                            String fullName = employeeRs.getString("full_name");
+                            String position = employeeRs.getString("position");
+                            double basicSalary = employeeRs.getDouble("monthly_salary");
+                            
+                            // Check if employee has processed attendance data for this period
+                            String checkAttendanceSQL = """
+                                SELECT COUNT(*) 
+                                FROM processed_attendance 
+                                WHERE employee_id = ? AND process_date BETWEEN ? AND ?
+                                """;
+                            
+                            boolean hasAttendanceData = false;
+                            try (PreparedStatement checkStmt = conn.prepareStatement(checkAttendanceSQL)) {
+                                checkStmt.setInt(1, employeeId);
+                                checkStmt.setDate(2, Date.valueOf(startDate));
+                                checkStmt.setDate(3, Date.valueOf(endDate));
+                                ResultSet checkRs = checkStmt.executeQuery();
+                                if (checkRs.next()) {
+                                    hasAttendanceData = checkRs.getInt(1) > 0;
+                                }
+                            }
+                            
+                            if (!hasAttendanceData) {
+                                skippedCount++;
+                                continue; // Skip employees without processed attendance
+                            }
+                            
+                            // Check if payroll already exists for this employee and period
+                            String checkPayrollSQL = """
+                                SELECT COUNT(*) 
+                                FROM payroll_process 
+                                WHERE employee_id = ? 
+                                AND pay_period_start = ? 
+                                AND pay_period_end = ?
+                                """;
+                            
+                            try (PreparedStatement checkStmt = conn.prepareStatement(checkPayrollSQL)) {
+                                checkStmt.setInt(1, employeeId);
+                                checkStmt.setDate(2, Date.valueOf(startDate));
+                                checkStmt.setDate(3, Date.valueOf(endDate));
+                                ResultSet checkRs = checkStmt.executeQuery();
+                                if (checkRs.next() && checkRs.getInt(1) > 0) {
+                                    skippedCount++;
+                                    continue; // Skip if already exists
+                                }
+                            }
+                            
+                            // Calculate payroll from processed attendance
+                            PayrollCalculation calc = calculatePayrollForEmployee(conn, employeeId, basicSalary, startDate, endDate);
+                            
+                            // Insert into payroll_process
+                            String insertSQL = """
+                                INSERT INTO payroll_process 
+                                (employee_id, account_number, pay_period_start, pay_period_end, basic_salary, 
+                                 present_days, absent_days, late_occurrences, overtime_hours,
+                                 basic_pay, overtime_pay, allowances, total_deductions, net_pay, 
+                                 status, processed_date, processed_by)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Calculated', CURRENT_TIMESTAMP, 'Admin')
+                                """;
+                            
+                            try (PreparedStatement insertStmt = conn.prepareStatement(insertSQL)) {
+                                insertStmt.setInt(1, employeeId);
+                                insertStmt.setString(2, accountNumber);
+                                insertStmt.setDate(3, Date.valueOf(startDate));
+                                insertStmt.setDate(4, Date.valueOf(endDate));
+                                insertStmt.setDouble(5, calc.basicSalary);
+                                insertStmt.setInt(6, calc.presentDays);
+                                insertStmt.setInt(7, calc.absentDays);
+                                insertStmt.setInt(8, calc.lateOccurrences);
+                                insertStmt.setDouble(9, calc.overtimeHours);
+                                insertStmt.setDouble(10, calc.basicPay);
+                                insertStmt.setDouble(11, calc.overtimePay);
+                                insertStmt.setDouble(12, calc.allowances);
+                                insertStmt.setDouble(13, calc.totalDeductions);
+                                insertStmt.setDouble(14, calc.netPay);
+                                
+                                insertStmt.executeUpdate();
+                                generatedCount++;
                             }
                         }
                     }
-                    
-                    return result;
-                    
-                } catch (SQLException e) {
-                    throw new Exception("Stored procedure execution failed: " + e.getMessage(), e);
                 }
+                
+                return String.format("Payroll generation completed!\n\n" +
+                    "✅ Generated: %d employees\n" +
+                    "⏭️ Skipped: %d employees (no attendance data or already processed)\n" +
+                    "📅 Period: %s to %s", 
+                    generatedCount, skippedCount, startDate, endDate);
             }
         };
         
         generateTask.setOnSucceeded(e -> {
             Platform.runLater(() -> {
                 String result = generateTask.getValue();
-                showInfoAlert("Payroll Generation Complete", 
-                            String.format("Payroll generated successfully!\n\n" +
-                                        "Period: %s to %s\n" +
-                                        "Result: %s", startDate, endDate, result));
+                showInfoAlert("Payroll Generation Complete", result);
                 loadPayrollData(); // Refresh the table
             });
         });
@@ -398,11 +486,256 @@ public class PayrollProcessingController implements Initializable {
         
         new Thread(generateTask).start();
     }
+    
+    private PayrollCalculation calculatePayrollForEmployee(Connection conn, int employeeId, double basicSalary, 
+            LocalDate startDate, LocalDate endDate) throws SQLException {
+        
+        PayrollCalculation calc = new PayrollCalculation();
+        calc.basicSalary = basicSalary;
+        calc.allowances = 0.0; // Can be enhanced later
+        
+        // Get processed attendance data
+        String attendanceSQL = """
+            SELECT 
+                SUM(hours_worked) as total_hours,
+                SUM(overtime_hours) as total_overtime,
+                SUM(late_minutes) as total_late_minutes,
+                SUM(absent_days) as total_absent_days,
+                COUNT(*) as present_days
+            FROM processed_attendance 
+            WHERE employee_id = ? AND process_date BETWEEN ? AND ?
+            """;
+        
+        try (PreparedStatement stmt = conn.prepareStatement(attendanceSQL)) {
+            stmt.setInt(1, employeeId);
+            stmt.setDate(2, Date.valueOf(startDate));
+            stmt.setDate(3, Date.valueOf(endDate));
+            
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                calc.overtimeHours = rs.getDouble("total_overtime");
+                calc.totalLateMinutes = rs.getInt("total_late_minutes");
+                calc.absentDays = rs.getInt("total_absent_days");
+                calc.presentDays = rs.getInt("present_days");
+            }
+        }
+        
+        // Calculate working days in period
+        int totalWorkingDays = (int) startDate.datesUntil(endDate.plusDays(1))
+            .filter(date -> date.getDayOfWeek().getValue() <= 5) // Monday to Friday
+            .count();
+        
+        calc.lateOccurrences = calc.totalLateMinutes > 0 ? 1 : 0; // Simplified
+        
+        // Calculate basic pay (prorated)
+        double dailyRate = calc.basicSalary / 22; // Assuming 22 working days per month
+        calc.basicPay = calc.presentDays * dailyRate;
+        
+        // Calculate overtime pay
+        double hourlyRate = calc.basicSalary / (22 * 8); // 22 working days, 8 hours per day
+        calc.overtimePay = calc.overtimeHours * hourlyRate * 1.5;
+        
+        // Calculate deductions
+        calc.totalDeductions = 0;
+        
+        // Get employee type to determine which deductions to apply
+        String employeeTypeSQL = """
+            SELECT position FROM employees WHERE id = ?
+            """;
+        
+        boolean isContractor = false;
+        try (PreparedStatement typeStmt = conn.prepareStatement(employeeTypeSQL)) {
+            typeStmt.setInt(1, employeeId);
+            ResultSet typeRs = typeStmt.executeQuery();
+            if (typeRs.next()) {
+                String position = typeRs.getString("position");
+                // Check if employee is contractor/instructor
+                isContractor = position != null && 
+                              (position.toLowerCase().contains("instructor") || 
+                               position.toLowerCase().contains("contractor"));
+            }
+        }
+        
+        // Apply different deductions based on employee type
+        String deductionTypesSQL;
+        if (isContractor) {
+            // For contractors/instructors: EVAT 5% + Expanded 3%
+            deductionTypesSQL = """
+                SELECT name, fixed_amount, percentage 
+                FROM deduction_types 
+                WHERE name IN ('GVAT', 'Expanded Tax')
+                """;
+        } else {
+            // For regular employees: standard government deductions
+            deductionTypesSQL = """
+                SELECT name, fixed_amount, percentage 
+                FROM deduction_types 
+                WHERE name IN ('PhilHealth', 'Withholding Tax', 'Pag-ibig', 'SSS')
+                """;
+        }
+        
+        try (PreparedStatement stmt = conn.prepareStatement(deductionTypesSQL)) {
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                Double fixedAmount = rs.getDouble("fixed_amount");
+                Double percentage = rs.getDouble("percentage");
+                
+                if (fixedAmount != null && fixedAmount > 0) {
+                    calc.totalDeductions += fixedAmount;
+                } else if (percentage != null && percentage > 0) {
+                    calc.totalDeductions += (calc.basicSalary * percentage / 100);
+                }
+            }
+        }
+        
+        // Employee-specific deductions
+        String employeeDeductionsSQL = """
+            SELECT ed.amount 
+            FROM employee_deductions ed
+            WHERE ed.employee_id = ?
+            """;
+        
+        try (PreparedStatement stmt = conn.prepareStatement(employeeDeductionsSQL)) {
+            stmt.setInt(1, employeeId);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                calc.totalDeductions += rs.getDouble("amount");
+            }
+        }
+        
+        // Late and absent deductions
+        double lateDeduction = (calc.totalLateMinutes / 60.0) * hourlyRate;
+        double absentDeduction = calc.absentDays * dailyRate;
+        calc.totalDeductions += lateDeduction + absentDeduction;
+        
+        // Calculate net pay
+        calc.netPay = calc.basicPay + calc.overtimePay + calc.allowances - calc.totalDeductions;
+        
+        return calc;
+    }
+    
+    private static class PayrollCalculation {
+        double basicSalary;
+        double basicPay;
+        double overtimePay;
+        double allowances;
+        double totalDeductions;
+        double netPay;
+        double overtimeHours;
+        int totalLateMinutes;
+        int absentDays;
+        int presentDays;
+        int lateOccurrences;
+    }
 
 
     @FXML
     private void onSearch(ActionEvent event) {
         filterPayrollData();
+    }
+
+    private void calculateIndividualDeductions(PayrollProcessEntry entry) {
+        try (Connection conn = getConnection()) {
+            double basicSalary = entry.getBasicSalary();
+            
+            // Determine employee type based on position
+            String employeeTypeSQL = """
+                SELECT position FROM employees WHERE id = ?
+                """;
+            
+            boolean isContractor = false;
+            try (PreparedStatement typeStmt = conn.prepareStatement(employeeTypeSQL)) {
+                typeStmt.setInt(1, entry.getEmployeeId());
+                ResultSet typeRs = typeStmt.executeQuery();
+                if (typeRs.next()) {
+                    String position = typeRs.getString("position");
+                    isContractor = position != null && 
+                                  (position.toLowerCase().contains("instructor") || 
+                                   position.toLowerCase().contains("contractor"));
+                }
+            }
+            
+            // Apply different deductions based on employee type
+            String deductionTypesSQL;
+            if (isContractor) {
+                // For contractors/instructors: EVAT 5% + Expanded 3%
+                deductionTypesSQL = """
+                    SELECT name, fixed_amount, percentage 
+                    FROM deduction_types 
+                    WHERE name IN ('GVAT', 'Expanded Tax')
+                    """;
+            } else {
+                // For regular employees: standard government deductions
+                deductionTypesSQL = """
+                    SELECT name, fixed_amount, percentage 
+                    FROM deduction_types 
+                    WHERE name IN ('PhilHealth', 'Withholding Tax', 'Pag-ibig', 'SSS')
+                    """;
+            }
+            
+            try (PreparedStatement stmt = conn.prepareStatement(deductionTypesSQL)) {
+                ResultSet rs = stmt.executeQuery();
+                while (rs.next()) {
+                    String deductionName = rs.getString("name");
+                    Double fixedAmount = rs.getDouble("fixed_amount");
+                    Double percentage = rs.getDouble("percentage");
+                    
+                    double deductionAmount = 0;
+                    if (fixedAmount != null && fixedAmount > 0) {
+                        deductionAmount = fixedAmount;
+                    } else if (percentage != null && percentage > 0) {
+                        deductionAmount = (basicSalary * percentage / 100);
+                    }
+                    
+                    if (isContractor) {
+                        // For contractors: EVAT and Expanded Tax go to withholding tax
+                        switch (deductionName.toLowerCase()) {
+                            case "gvat" -> {
+                                // EVAT 5% - treat as withholding tax for display
+                                entry.setWithholdingTax(entry.getWithholdingTax() + deductionAmount);
+                            }
+                            case "expanded tax" -> {
+                                // Expanded 3% - add to withholding tax
+                                entry.setWithholdingTax(entry.getWithholdingTax() + deductionAmount);
+                            }
+                        }
+                    } else {
+                        // For regular employees: standard deductions
+                        switch (deductionName.toLowerCase()) {
+                            case "philhealth" -> entry.setPhilhealthDeduction(deductionAmount);
+                            case "withholding tax" -> entry.setWithholdingTax(deductionAmount);
+                            case "pag-ibig" -> entry.setPagibigDeduction(deductionAmount);
+                            case "sss" -> entry.setSssDeduction(deductionAmount);
+                        }
+                    }
+                }
+            }
+            
+            // Calculate late deduction
+            double hourlyRate = basicSalary / (22 * 8); // 22 working days, 8 hours per day
+            double lateMinutes = entry.getTotalLateMinutes();
+            double lateDeduction = (lateMinutes / 60.0) * hourlyRate;
+            entry.setLateDeduction(lateDeduction);
+            
+            // Calculate absent deduction
+            double dailyRate = basicSalary / 22;
+            double absentDeduction = entry.getAbsentDays() * dailyRate;
+            entry.setAbsentDeduction(absentDeduction);
+            
+            // Calculate gross pay
+            double grossPay = entry.getBasicPay() + entry.getOvertimePay() + entry.getAllowances();
+            entry.setGrossPay(grossPay);
+            
+            // Calculate other deductions (total - known deductions)
+            double knownDeductions = entry.getPhilhealthDeduction() + entry.getWithholdingTax() + 
+                                   entry.getPagibigDeduction() + entry.getSssDeduction() + 
+                                   entry.getLateDeduction() + entry.getAbsentDeduction();
+            double otherDeductions = Math.max(0, entry.getTotalDeductions() - knownDeductions);
+            entry.setOtherDeductions(otherDeductions);
+            
+        } catch (SQLException e) {
+            System.err.println("Error calculating individual deductions: " + e.getMessage());
+        }
     }
 
     @FXML
@@ -423,6 +756,11 @@ public class PayrollProcessingController implements Initializable {
         details.append(String.format("Position: %s\n", entry.getPosition()));
         details.append(String.format("Period: %s to %s\n\n", entry.getPayPeriodStart(), entry.getPayPeriodEnd()));
         
+        // Determine employee type
+        boolean isContractor = entry.getPosition() != null && 
+                              (entry.getPosition().toLowerCase().contains("instructor") || 
+                               entry.getPosition().toLowerCase().contains("contractor"));
+        
         details.append("ATTENDANCE SUMMARY:\n");
         details.append(String.format("• Total Work Days: %d\n", entry.getTotalWorkDays()));
         details.append(String.format("• Present Days: %d\n", entry.getPresentDays()));
@@ -438,16 +776,36 @@ public class PayrollProcessingController implements Initializable {
         details.append(String.format("• Gross Pay: ₱%.2f\n\n", entry.getGrossPay()));
         
         details.append("DEDUCTIONS:\n");
-        details.append(String.format("• SSS: ₱%.2f\n", entry.getSssDeduction()));
-        details.append(String.format("• PhilHealth: ₱%.2f\n", entry.getPhilhealthDeduction()));
-        details.append(String.format("• Pag-IBIG: ₱%.2f\n", entry.getPagibigDeduction()));
-        details.append(String.format("• Withholding Tax: ₱%.2f\n", entry.getWithholdingTax()));
+        
+        if (isContractor) {
+            // For contractors/instructors: show withholding taxes
+            details.append(String.format("• Withholding Tax (EVAT 5%% + Expanded 3%%): ₱%.2f\n", entry.getWithholdingTax()));
+            details.append("  - EVAT 5%% (VAT Withholding Tax)\n");
+            details.append("  - Expanded 3%% (Income Tax Withholding)\n");
+        } else {
+            // For regular employees: show standard government deductions
+            details.append(String.format("• SSS: ₱%.2f\n", entry.getSssDeduction()));
+            details.append(String.format("• PhilHealth: ₱%.2f\n", entry.getPhilhealthDeduction()));
+            details.append(String.format("• Pag-IBIG: ₱%.2f\n", entry.getPagibigDeduction()));
+            details.append(String.format("• Withholding Tax: ₱%.2f\n", entry.getWithholdingTax()));
+        }
+        
         details.append(String.format("• Late Deduction: ₱%.2f\n", entry.getLateDeduction()));
         details.append(String.format("• Absent Deduction: ₱%.2f\n", entry.getAbsentDeduction()));
         details.append(String.format("• Other Deductions: ₱%.2f\n", entry.getOtherDeductions()));
         details.append(String.format("• Total Deductions: ₱%.2f\n\n", entry.getTotalDeductions()));
         
         details.append(String.format("NET PAY: ₱%.2f\n", entry.getNetPay()));
+        
+        // Add employee type information
+        details.append("\n=====================================\n");
+        if (isContractor) {
+            details.append("Employee Type: CONTRACTOR/INSTRUCTOR\n");
+            details.append("Tax Scheme: EVAT 5% + Expanded 3% = 8% Total Withholding\n");
+        } else {
+            details.append("Employee Type: REGULAR EMPLOYEE\n");
+            details.append("Deductions: Standard Government Contributions + Withholding Tax\n");
+        }
         
         Alert alert = new Alert(AlertType.INFORMATION);
         alert.setTitle("Payroll Computation Details");

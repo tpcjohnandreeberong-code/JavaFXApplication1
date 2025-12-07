@@ -214,34 +214,54 @@ public class PayrollGeneratorController implements Initializable {
 
     private void showAddPayrollDialog() {
         Dialog<PayrollEntry> dialog = new Dialog<>();
-        dialog.setTitle("Add New Payroll Entry");
-        dialog.setHeaderText("Enter payroll details:");
+        dialog.setTitle("Generate Payroll Entry");
+        dialog.setHeaderText("Generate payroll from processed attendance data:");
         
         // Set the button types
-        ButtonType addButtonType = new ButtonType("Add", ButtonBar.ButtonData.OK_DONE);
+        ButtonType addButtonType = new ButtonType("Generate", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(addButtonType, ButtonType.CANCEL);
         
-        // Create the form
-        GridPane grid = createPayrollForm();
+        // Create the enhanced form for attendance-based generation
+        GridPane grid = createAttendanceBasedPayrollForm();
         dialog.getDialogPane().setContent(grid);
         
         // Get form controls
         ComboBox<Employee> employeeCombo = (ComboBox<Employee>) grid.getChildren().get(1);
-        TextField payPeriodField = (TextField) grid.getChildren().get(3);
-        TextField basicSalaryField = (TextField) grid.getChildren().get(5);
-        TextField overtimeField = (TextField) grid.getChildren().get(7);
-        TextField allowancesField = (TextField) grid.getChildren().get(9);
-        TextField deductionsField = (TextField) grid.getChildren().get(11);
-        ComboBox<String> statusCombo = (ComboBox<String>) grid.getChildren().get(13);
+        DatePicker startDatePicker = (DatePicker) grid.getChildren().get(3);
+        DatePicker endDatePicker = (DatePicker) grid.getChildren().get(5);
+        Label attendanceInfoLabel = (Label) grid.getChildren().get(7);
+        TextField basicSalaryField = (TextField) grid.getChildren().get(9);
+        TextField overtimeField = (TextField) grid.getChildren().get(11);
+        TextField allowancesField = (TextField) grid.getChildren().get(13);
+        TextField deductionsField = (TextField) grid.getChildren().get(15);
+        Label netPayLabel = (Label) grid.getChildren().get(17);
+        ComboBox<String> statusCombo = (ComboBox<String>) grid.getChildren().get(19);
         
         // Load employees
         loadEmployeesForCombo(employeeCombo);
         
         // Set default values
-        payPeriodField.setText(LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM")));
+        startDatePicker.setValue(LocalDate.now().withDayOfMonth(1));
+        endDatePicker.setValue(LocalDate.now());
         statusCombo.setValue("Draft");
         
-        // Convert the result when the add button is clicked
+        // Auto-calculate when employee or dates change
+        Runnable calculatePayroll = () -> {
+            Employee selectedEmployee = employeeCombo.getValue();
+            LocalDate startDate = startDatePicker.getValue();
+            LocalDate endDate = endDatePicker.getValue();
+            
+            if (selectedEmployee != null && startDate != null && endDate != null) {
+                calculatePayrollFromProcessedAttendance(selectedEmployee, startDate, endDate, 
+                    basicSalaryField, overtimeField, deductionsField, attendanceInfoLabel, netPayLabel);
+            }
+        };
+        
+        employeeCombo.valueProperty().addListener((obs, oldVal, newVal) -> calculatePayroll.run());
+        startDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> calculatePayroll.run());
+        endDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> calculatePayroll.run());
+        
+        // Convert the result when the generate button is clicked
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == addButtonType) {
                 try {
@@ -255,7 +275,7 @@ public class PayrollGeneratorController implements Initializable {
                     entry.setEmployeeId(selectedEmployee.getId());
                     entry.setEmployeeName(selectedEmployee.getFullName());
                     entry.setPosition(selectedEmployee.getPosition());
-                    entry.setPayPeriod(payPeriodField.getText());
+                    entry.setPayPeriod(startDatePicker.getValue() + " to " + endDatePicker.getValue());
                     entry.setBasicSalary(Double.parseDouble(basicSalaryField.getText()));
                     entry.setOvertime(Double.parseDouble(overtimeField.getText()));
                     entry.setAllowances(Double.parseDouble(allowancesField.getText()));
@@ -327,6 +347,78 @@ public class PayrollGeneratorController implements Initializable {
         ComboBox<String> statusCombo = new ComboBox<>();
         statusCombo.setItems(FXCollections.observableArrayList("Draft", "Generated", "Paid"));
         grid.add(statusCombo, 1, 6);
+        
+        return grid;
+    }
+
+    private GridPane createAttendanceBasedPayrollForm() {
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new javafx.geometry.Insets(20, 150, 10, 10));
+        
+        // Employee selection
+        grid.add(new Label("Employee:"), 0, 0);
+        ComboBox<Employee> employeeCombo = new ComboBox<>();
+        employeeCombo.setPromptText("Select Employee");
+        employeeCombo.setPrefWidth(250);
+        grid.add(employeeCombo, 1, 0);
+        
+        // Start Date
+        grid.add(new Label("Start Date:"), 0, 1);
+        DatePicker startDatePicker = new DatePicker();
+        grid.add(startDatePicker, 1, 1);
+        
+        // End Date  
+        grid.add(new Label("End Date:"), 0, 2);
+        DatePicker endDatePicker = new DatePicker();
+        grid.add(endDatePicker, 1, 2);
+        
+        // Attendance Info
+        grid.add(new Label("Attendance Info:"), 0, 3);
+        Label attendanceInfoLabel = new Label("Select employee and dates");
+        attendanceInfoLabel.setStyle("-fx-text-fill: blue; -fx-font-style: italic;");
+        grid.add(attendanceInfoLabel, 1, 3);
+        
+        // Basic Salary
+        grid.add(new Label("Basic Salary:"), 0, 4);
+        TextField basicSalaryField = new TextField();
+        basicSalaryField.setPromptText("0.00");
+        basicSalaryField.setEditable(false);
+        grid.add(basicSalaryField, 1, 4);
+        
+        // Overtime Pay
+        grid.add(new Label("Overtime Pay:"), 0, 5);
+        TextField overtimeField = new TextField();
+        overtimeField.setPromptText("0.00");
+        overtimeField.setEditable(false);
+        grid.add(overtimeField, 1, 5);
+        
+        // Allowances
+        grid.add(new Label("Allowances:"), 0, 6);
+        TextField allowancesField = new TextField();
+        allowancesField.setPromptText("0.00");
+        allowancesField.setText("0.00");
+        grid.add(allowancesField, 1, 6);
+        
+        // Total Deductions
+        grid.add(new Label("Total Deductions:"), 0, 7);
+        TextField deductionsField = new TextField();
+        deductionsField.setPromptText("0.00");
+        deductionsField.setEditable(false);
+        grid.add(deductionsField, 1, 7);
+        
+        // Net Pay
+        grid.add(new Label("Net Pay:"), 0, 8);
+        Label netPayLabel = new Label("₱0.00");
+        netPayLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: green;");
+        grid.add(netPayLabel, 1, 8);
+        
+        // Status
+        grid.add(new Label("Status:"), 0, 9);
+        ComboBox<String> statusCombo = new ComboBox<>();
+        statusCombo.setItems(FXCollections.observableArrayList("Draft", "Generated", "Paid"));
+        grid.add(statusCombo, 1, 9);
         
         return grid;
     }
@@ -604,6 +696,148 @@ public class PayrollGeneratorController implements Initializable {
         });
         
         new Thread(deleteTask).start();
+    }
+
+    private void calculatePayrollFromProcessedAttendance(Employee employee, LocalDate startDate, LocalDate endDate,
+            TextField basicSalaryField, TextField overtimeField, TextField deductionsField, 
+            Label attendanceInfoLabel, Label netPayLabel) {
+        
+        Task<Void> calculateTask = new Task<Void>() {
+            @Override
+            protected Void call() throws Exception {
+                
+                // 1. Get employee basic salary
+                double basicSalary = employee.getSalary();
+                
+                // 2. Get processed attendance data
+                String attendanceSQL = """
+                    SELECT 
+                        SUM(hours_worked) as total_hours,
+                        SUM(overtime_hours) as total_overtime,
+                        SUM(late_minutes) as total_late_minutes,
+                        SUM(absent_days) as total_absent_days,
+                        COUNT(*) as total_days
+                    FROM processed_attendance 
+                    WHERE employee_id = ? AND process_date BETWEEN ? AND ?
+                    """;
+                
+                double totalHours = 0, totalOvertime = 0, totalLateMinutes = 0, totalAbsentDays = 0;
+                int totalDays = 0;
+                
+                try (Connection conn = getConnection();
+                     PreparedStatement stmt = conn.prepareStatement(attendanceSQL)) {
+                    
+                    stmt.setInt(1, employee.getId());
+                    stmt.setDate(2, java.sql.Date.valueOf(startDate));
+                    stmt.setDate(3, java.sql.Date.valueOf(endDate));
+                    
+                    ResultSet rs = stmt.executeQuery();
+                    if (rs.next()) {
+                        totalHours = rs.getDouble("total_hours");
+                        totalOvertime = rs.getDouble("total_overtime");
+                        totalLateMinutes = rs.getDouble("total_late_minutes");
+                        totalAbsentDays = rs.getDouble("total_absent_days");
+                        totalDays = rs.getInt("total_days");
+                    }
+                }
+                
+                // Make final copies for use in lambda
+                final double finalTotalHours = totalHours;
+                final double finalTotalOvertime = totalOvertime;
+                final double finalTotalLateMinutes = totalLateMinutes;
+                final double finalTotalAbsentDays = totalAbsentDays;
+                final int finalTotalDays = totalDays;
+                
+                // 3. Calculate overtime pay (assume 1.5x hourly rate)
+                double hourlyRate = basicSalary / (22 * 8); // 22 working days, 8 hours per day
+                double overtimePay = totalOvertime * hourlyRate * 1.5;
+                
+                // 4. Calculate deductions from deduction_types and employee_deductions
+                double totalDeductions = 0;
+                
+                // 4a. Get mandatory deductions from deduction_types
+                String deductionTypesSQL = """
+                    SELECT id, name, fixed_amount, percentage 
+                    FROM deduction_types 
+                    WHERE name IN ('Pag-ibig', 'GVAT', 'Expanded Tax')
+                    """;
+                
+                try (Connection conn = getConnection();
+                     PreparedStatement stmt = conn.prepareStatement(deductionTypesSQL)) {
+                    
+                    ResultSet rs = stmt.executeQuery();
+                    while (rs.next()) {
+                        String name = rs.getString("name");
+                        Double fixedAmount = rs.getDouble("fixed_amount");
+                        Double percentage = rs.getDouble("percentage");
+                        
+                        if (fixedAmount != null && fixedAmount > 0) {
+                            totalDeductions += fixedAmount;
+                        } else if (percentage != null && percentage > 0) {
+                            totalDeductions += (basicSalary * percentage / 100);
+                        }
+                    }
+                }
+                
+                // 4b. Get employee-specific deductions
+                String employeeDeductionsSQL = """
+                    SELECT ed.amount, dt.name 
+                    FROM employee_deductions ed
+                    JOIN deduction_types dt ON ed.deduction_type_id = dt.id
+                    WHERE ed.employee_id = ?
+                    """;
+                
+                try (Connection conn = getConnection();
+                     PreparedStatement stmt = conn.prepareStatement(employeeDeductionsSQL)) {
+                    
+                    stmt.setInt(1, employee.getId());
+                    ResultSet rs = stmt.executeQuery();
+                    while (rs.next()) {
+                        totalDeductions += rs.getDouble("amount");
+                    }
+                }
+                
+                // 4c. Calculate late and absent deductions
+                double lateDeduction = (totalLateMinutes / 60.0) * hourlyRate; // Deduct per hour of lateness
+                double absentDeduction = totalAbsentDays * (basicSalary / 22); // Per day deduction
+                totalDeductions += lateDeduction + absentDeduction;
+                
+                // 5. Calculate net pay
+                double netPay = basicSalary + overtimePay - totalDeductions;
+                
+                // Make final copies for use in lambda
+                final double finalTotalDeductions = totalDeductions;
+                final double finalNetPay = netPay;
+                final double finalOvertimePay = overtimePay;
+                
+                // Update UI on JavaFX thread
+                Platform.runLater(() -> {
+                    basicSalaryField.setText(String.format("%.2f", basicSalary));
+                    overtimeField.setText(String.format("%.2f", finalOvertimePay));
+                    deductionsField.setText(String.format("%.2f", finalTotalDeductions));
+                    netPayLabel.setText(String.format("₱%.2f", finalNetPay));
+                    
+                    String attendanceInfo = String.format(
+                        "Days: %d | Hours: %.2f | OT: %.2f hrs | Late: %.0f mins | Absent: %.0f days",
+                        finalTotalDays, finalTotalHours, finalTotalOvertime, finalTotalLateMinutes, finalTotalAbsentDays
+                    );
+                    attendanceInfoLabel.setText(attendanceInfo);
+                });
+                
+                return null;
+            }
+        };
+        
+        calculateTask.setOnFailed(e -> {
+            Throwable exception = calculateTask.getException();
+            Platform.runLater(() -> {
+                attendanceInfoLabel.setText("Error calculating payroll: " + exception.getMessage());
+                System.err.println("Payroll calculation error: " + exception.getMessage());
+                exception.printStackTrace();
+            });
+        });
+        
+        new Thread(calculateTask).start();
     }
 
     private void showInfoAlert(String title, String message) {
