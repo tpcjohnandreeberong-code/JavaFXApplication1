@@ -17,6 +17,7 @@ import javafx.scene.control.TextInputDialog;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.geometry.Insets;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.ButtonBar;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.DatePicker;
@@ -28,6 +29,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import javafx.scene.control.Button;
 
 /**
  * Controller for Loan Management System
@@ -48,6 +50,13 @@ public class LoanManagementController implements Initializable {
     @FXML private TableColumn<LoanRecord, String> colEndDate;
     @FXML private TableColumn<LoanRecord, String> colStatus;
     
+    // Action buttons
+    @FXML private Button addLoanButton;
+    @FXML private Button searchButton;
+    @FXML private Button editButton;
+    @FXML private Button paymentButton;
+    @FXML private Button markCompleteButton;
+    
     private ObservableList<LoanRecord> loanData = FXCollections.observableArrayList();
     private Connection connection;
     private static final Logger logger = Logger.getLogger(LoanManagementController.class.getName());
@@ -63,6 +72,136 @@ public class LoanManagementController implements Initializable {
         initializeDatabase();
         setupLoanTypeFilter();
         loadLoanData();
+        
+        // Setup permission-based button visibility
+        setupPermissionBasedVisibility();
+        
+        // Log module access
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "LOAN_MANAGEMENT_MODULE_ACCESS",
+                "LOW",
+                currentUser,
+                "Accessed Loan Management module"
+            );
+        }
+    }
+    
+    private void setupPermissionBasedVisibility() {
+        try {
+            // Get current user from SessionManager
+            SessionManager sessionManager = SessionManager.getInstance();
+            
+            if (sessionManager.isLoggedIn()) {
+                String currentUser = sessionManager.getCurrentUser();
+                logger.info("Setting up permission-based visibility for user: " + currentUser);
+                
+                // Check user permissions
+                boolean canView = hasUserPermission(currentUser, "loan_mgmt.view");
+                boolean canAdd = hasUserPermission(currentUser, "loan_mgmt.add");
+                boolean canEdit = hasUserPermission(currentUser, "loan_mgmt.edit");
+                
+                // Show/hide buttons based on permissions
+                if (addLoanButton != null) {
+                    addLoanButton.setVisible(canAdd);
+                    addLoanButton.setManaged(canAdd);
+                }
+                if (searchButton != null) {
+                    searchButton.setVisible(canView);
+                    searchButton.setManaged(canView);
+                }
+                if (editButton != null) {
+                    editButton.setVisible(canEdit);
+                    editButton.setManaged(canEdit);
+                }
+                if (paymentButton != null) {
+                    // Payment modifies loan balance, so it requires edit permission
+                    paymentButton.setVisible(canEdit);
+                    paymentButton.setManaged(canEdit);
+                }
+                if (markCompleteButton != null) {
+                    // Mark Complete modifies loan status, so it requires edit permission
+                    markCompleteButton.setVisible(canEdit);
+                    markCompleteButton.setManaged(canEdit);
+                }
+                
+                logger.info("Loan Management buttons visibility - View: " + canView + ", Add: " + canAdd + ", Edit: " + canEdit);
+                
+            } else {
+                logger.warning("No user session found, hiding all action buttons");
+                hideAllActionButtons();
+            }
+            
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error setting up permission-based visibility", e);
+            hideAllActionButtons();
+        }
+    }
+    
+    private void hideAllActionButtons() {
+        if (addLoanButton != null) {
+            addLoanButton.setVisible(false);
+            addLoanButton.setManaged(false);
+        }
+        if (searchButton != null) {
+            searchButton.setVisible(false);
+            searchButton.setManaged(false);
+        }
+        if (editButton != null) {
+            editButton.setVisible(false);
+            editButton.setManaged(false);
+        }
+        if (paymentButton != null) {
+            paymentButton.setVisible(false);
+            paymentButton.setManaged(false);
+        }
+        if (markCompleteButton != null) {
+            markCompleteButton.setVisible(false);
+            markCompleteButton.setManaged(false);
+        }
+    }
+    
+    private boolean hasUserPermission(String username, String permissionName) {
+        try {
+            if (connection == null || connection.isClosed()) {
+                logger.warning("Database connection not available, defaulting to admin permissions for user: " + username);
+                return username != null && username.equals("admin");
+            }
+            
+            // Get user's role from database
+            String getRoleQuery = "SELECT role FROM users WHERE username = ?";
+            PreparedStatement getRoleStmt = connection.prepareStatement(getRoleQuery);
+            getRoleStmt.setString(1, username);
+            ResultSet roleRs = getRoleStmt.executeQuery();
+            
+            if (roleRs.next()) {
+                String userRole = roleRs.getString("role");
+                
+                // Check if role has the permission
+                String checkPermissionQuery = "SELECT COUNT(*) FROM role_permissions rp " +
+                                           "JOIN roles r ON rp.role_id = r.role_id " +
+                                           "JOIN permissions p ON rp.permission_id = p.permission_id " +
+                                           "WHERE r.role_name = ? AND p.permission_name = ? AND rp.granted = TRUE";
+                PreparedStatement checkPermissionStmt = connection.prepareStatement(checkPermissionQuery);
+                checkPermissionStmt.setString(1, userRole);
+                checkPermissionStmt.setString(2, permissionName);
+                ResultSet permissionRs = checkPermissionStmt.executeQuery();
+                
+                if (permissionRs.next()) {
+                    boolean hasPermission = permissionRs.getInt(1) > 0;
+                    logger.info("User " + username + " (Role: " + userRole + ") has permission " + permissionName + ": " + hasPermission);
+                    return hasPermission;
+                }
+            }
+            
+            return false;
+            
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error checking user permission", e);
+            // If database error occurs, default to admin permissions for admin user
+            return username != null && username.equals("admin");
+        }
     }
     
     private void setupTableColumns() {
@@ -80,8 +219,24 @@ public class LoanManagementController implements Initializable {
     }
     
     private void setupLoanTypeFilter() {
-        loanTypeFilter.getItems().addAll("All Types", "Pag-IBIG Loan", "SSS Loan", "Company Loan");
+        loanTypeFilter.getItems().add("All Types");
+        loadLoanTypesIntoFilter();
         loanTypeFilter.setValue("All Types");
+    }
+    
+    private void loadLoanTypesIntoFilter() {
+        String sql = "SELECT DISTINCT name FROM loan_types ORDER BY name";
+        
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            ResultSet rs = stmt.executeQuery();
+            
+            while (rs.next()) {
+                loanTypeFilter.getItems().add(rs.getString("name"));
+            }
+            
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error loading loan types", e);
+        }
     }
     
     private void initializeDatabase() {
@@ -100,51 +255,27 @@ public class LoanManagementController implements Initializable {
     }
     
     private void createLoanTablesIfNotExist() {
-        // Create loan_types table
-        String createLoanTypesSQL = """
-            CREATE TABLE IF NOT EXISTS loan_types (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(100) NOT NULL UNIQUE,
-                description TEXT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            """;
-        
-        // Create employee_loans table
-        String createEmployeeLoansSQL = """
-            CREATE TABLE IF NOT EXISTS employee_loans (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                employee_id INT NOT NULL,
-                loan_type_id INT NOT NULL,
-                loan_amount DECIMAL(10,2) NOT NULL,
-                monthly_amortization DECIMAL(10,2) NOT NULL,
-                balance DECIMAL(10,2) NOT NULL,
-                start_date DATE NOT NULL,
-                end_date DATE NULL,
-                status ENUM('Active','Completed','Stopped') DEFAULT 'Active',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                FOREIGN KEY (employee_id) REFERENCES employees(id),
-                FOREIGN KEY (loan_type_id) REFERENCES loan_types(id),
-                INDEX idx_employee_id (employee_id),
-                INDEX idx_loan_type_id (loan_type_id),
-                INDEX idx_status (status)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            """;
-        
-        try (PreparedStatement stmt1 = connection.prepareStatement(createLoanTypesSQL);
-             PreparedStatement stmt2 = connection.prepareStatement(createEmployeeLoansSQL)) {
+        // The tables already exist in your database, so we'll just check if they exist
+        // and update the existing loan_types if needed
+        try {
+            // Check if loan_types table exists and has data
+            String checkSQL = "SELECT COUNT(*) FROM loan_types";
+            try (PreparedStatement stmt = connection.prepareStatement(checkSQL);
+                 ResultSet rs = stmt.executeQuery()) {
+                
+                rs.next();
+                int count = rs.getInt(1);
+                
+                if (count == 0) {
+                    // Insert default loan types if none exist
+                    insertDefaultLoanTypes();
+                }
+            }
             
-            stmt1.executeUpdate();
-            stmt2.executeUpdate();
-            
-            // Insert default loan types
-            insertDefaultLoanTypes();
-            
-            logger.info("Loan management tables created or already exist");
+            logger.info("Using existing loan management tables");
             
         } catch (SQLException e) {
-            logger.log(Level.SEVERE, "Error creating loan management tables", e);
+            logger.log(Level.SEVERE, "Error checking loan management tables", e);
         }
     }
     
@@ -169,13 +300,58 @@ public class LoanManagementController implements Initializable {
     
     @FXML
     private void onAdd() {
-        Dialog<LoanData> dialog = createLoanDialog("Add New Loan", null);
+        // Log add click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "LOAN_MANAGEMENT_ADD_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Add Loan button"
+            );
+        }
+        
+        Dialog<LoanData> dialog = createLoanDialog("Add New Loan", null, 0);
         Optional<LoanData> result = dialog.showAndWait();
         
         if (result.isPresent()) {
             LoanData loanData = result.get();
-            addLoan(loanData);
-            loadLoanData();
+            if (addLoan(loanData)) {
+                // Log successful add
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "LOAN_MANAGEMENT_ADD_SUCCESS",
+                        "MEDIUM",
+                        currentUser,
+                        "Added loan - Employee ID: " + loanData.employeeId + 
+                        ", Loan Type: " + loanData.loanType + 
+                        ", Loan Amount: ₱" + loanData.loanAmount + 
+                        ", Monthly Amortization: ₱" + loanData.monthlyAmortization
+                    );
+                }
+                loadLoanData();
+            } else {
+                // Log failed add
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "LOAN_MANAGEMENT_ADD_FAILED",
+                        "MEDIUM",
+                        currentUser,
+                        "Failed to add loan - Employee ID: " + loanData.employeeId + 
+                        ", Loan Type: " + loanData.loanType
+                    );
+                }
+            }
+        } else {
+            // Log add cancelled
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "LOAN_MANAGEMENT_ADD_CANCELLED",
+                    "LOW",
+                    currentUser,
+                    "Cancelled adding loan"
+                );
+            }
         }
     }
     
@@ -184,25 +360,128 @@ public class LoanManagementController implements Initializable {
         LoanRecord selected = table.getSelectionModel().getSelectedItem();
         if (selected == null) {
             showAlert("No Selection", "Please select a loan record to edit");
+            
+            // Log failed edit attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "LOAN_MANAGEMENT_EDIT_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Attempted to edit loan but no record was selected"
+                );
+            }
             return;
         }
         
-        // Create loan data from selected record for editing
-        LoanData currentData = new LoanData();
-        currentData.employeeId = Integer.parseInt(selected.getId().split("-")[0]); // Assuming format: employeeId-loanId
-        currentData.loanType = selected.getLoanType();
-        currentData.loanAmount = new BigDecimal(selected.getLoanAmount().replace("₱", "").replace(",", ""));
-        currentData.monthlyAmortization = new BigDecimal(selected.getMonthlyAmortization().replace("₱", "").replace(",", ""));
-        currentData.startDate = LocalDate.parse(selected.getStartDate());
+        // Log edit click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        String loanId = selected.getId();
+        String employeeName = selected.getEmployeeName();
+        String loanType = selected.getLoanType();
         
-        Dialog<LoanData> dialog = createLoanDialog("Edit Loan", currentData);
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "LOAN_MANAGEMENT_EDIT_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Edit Loan button - Loan ID: " + loanId + 
+                ", Employee: " + employeeName + 
+                ", Loan Type: " + loanType
+            );
+        }
+        
+        // Get the loan ID and employee ID from database
+        int id = Integer.parseInt(loanId);
+        LoanData currentData = getLoanDataFromDatabase(id);
+        
+        if (currentData == null) {
+            showAlert("Error", "Could not load loan data for editing");
+            
+            // Log load error
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "LOAN_MANAGEMENT_EDIT_FAILED",
+                    "MEDIUM",
+                    currentUser,
+                    "Failed to load loan data for editing - Loan ID: " + loanId
+                );
+            }
+            return;
+        }
+        
+        Dialog<LoanData> dialog = createLoanDialog("Edit Loan", currentData, id);
         Optional<LoanData> result = dialog.showAndWait();
         
         if (result.isPresent()) {
             LoanData updatedData = result.get();
-            updateLoan(Integer.parseInt(selected.getId()), updatedData);
-            loadLoanData();
+            if (updateLoan(id, updatedData)) {
+                // Log successful edit
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "LOAN_MANAGEMENT_EDIT_SUCCESS",
+                        "MEDIUM",
+                        currentUser,
+                        "Updated loan - Loan ID: " + loanId + 
+                        ", Employee ID: " + updatedData.employeeId + 
+                        ", Loan Type: " + updatedData.loanType + 
+                        ", Loan Amount: ₱" + updatedData.loanAmount + 
+                        ", Monthly Amortization: ₱" + updatedData.monthlyAmortization
+                    );
+                }
+                loadLoanData();
+            } else {
+                // Log failed update
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "LOAN_MANAGEMENT_EDIT_FAILED",
+                        "MEDIUM",
+                        currentUser,
+                        "Failed to update loan - Loan ID: " + loanId
+                    );
+                }
+            }
+        } else {
+            // Log edit cancelled
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "LOAN_MANAGEMENT_EDIT_CANCELLED",
+                    "LOW",
+                    currentUser,
+                    "Cancelled editing loan - Loan ID: " + loanId
+                );
+            }
         }
+    }
+    
+    private LoanData getLoanDataFromDatabase(int loanId) {
+        String sql = """
+            SELECT el.employee_id, lt.name as loan_type, el.loan_amount, 
+                   el.monthly_amortization, el.start_date
+            FROM employee_loans el
+            JOIN loan_types lt ON el.loan_type_id = lt.id
+            WHERE el.id = ?
+            """;
+        
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, loanId);
+            ResultSet rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                LoanData data = new LoanData();
+                data.employeeId = rs.getInt("employee_id");
+                data.loanType = rs.getString("loan_type");
+                data.loanAmount = rs.getBigDecimal("loan_amount");
+                data.monthlyAmortization = rs.getBigDecimal("monthly_amortization");
+                data.startDate = rs.getDate("start_date").toLocalDate();
+                return data;
+            }
+            
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error loading loan data from database", e);
+        }
+        
+        return null;
     }
     
     @FXML
@@ -210,17 +489,57 @@ public class LoanManagementController implements Initializable {
         LoanRecord selected = table.getSelectionModel().getSelectedItem();
         if (selected == null) {
             showAlert("No Selection", "Please select a loan record to process payment");
+            
+            // Log failed payment attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "LOAN_MANAGEMENT_PAYMENT_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Attempted to process payment but no loan record was selected"
+                );
+            }
             return;
         }
         
         if (!"Active".equals(selected.getStatus())) {
             showAlert("Invalid Status", "Can only process payments for active loans");
+            
+            // Log invalid status
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "LOAN_MANAGEMENT_PAYMENT_FAILED",
+                    "MEDIUM",
+                    currentUser,
+                    "Attempted to process payment for loan ID: " + selected.getId() + 
+                    " but loan status is not Active (Status: " + selected.getStatus() + ")"
+                );
+            }
             return;
+        }
+        
+        // Log payment click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        String loanId = selected.getId();
+        String employeeName = selected.getEmployeeName();
+        String balance = selected.getBalance();
+        
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "LOAN_MANAGEMENT_PAYMENT_CLICK",
+                "HIGH",
+                currentUser,
+                "Clicked Process Payment button - Loan ID: " + loanId + 
+                ", Employee: " + employeeName + 
+                ", Current Balance: " + balance
+            );
         }
         
         TextInputDialog dialog = new TextInputDialog(selected.getMonthlyAmortization());
         dialog.setTitle("Process Loan Payment");
-        dialog.setHeaderText("Process Payment for " + selected.getEmployeeName());
+        dialog.setHeaderText("Process Payment for " + employeeName);
         dialog.setContentText("Payment Amount (₱):");
         
         Optional<String> result = dialog.showAndWait();
@@ -229,14 +548,70 @@ public class LoanManagementController implements Initializable {
                 BigDecimal paymentAmount = new BigDecimal(result.get());
                 if (paymentAmount.compareTo(BigDecimal.ZERO) <= 0) {
                     showAlert("Invalid Amount", "Payment amount must be greater than 0");
+                    
+                    // Log invalid amount
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "LOAN_MANAGEMENT_PAYMENT_FAILED",
+                            "MEDIUM",
+                            currentUser,
+                            "Invalid payment amount entered - Loan ID: " + loanId + 
+                            ", Amount: ₱" + paymentAmount
+                        );
+                    }
                     return;
                 }
                 
-                processLoanPayment(Integer.parseInt(selected.getId()), paymentAmount);
+                if (processLoanPayment(Integer.parseInt(loanId), paymentAmount)) {
+                    // Log successful payment
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "LOAN_MANAGEMENT_PAYMENT_SUCCESS",
+                            "HIGH",
+                            currentUser,
+                            "Processed loan payment - Loan ID: " + loanId + 
+                            ", Employee: " + employeeName + 
+                            ", Payment Amount: ₱" + paymentAmount + 
+                            ", Previous Balance: " + balance
+                        );
+                    }
+                } else {
+                    // Log failed payment
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "LOAN_MANAGEMENT_PAYMENT_FAILED",
+                            "HIGH",
+                            currentUser,
+                            "Failed to process loan payment - Loan ID: " + loanId + 
+                            ", Payment Amount: ₱" + paymentAmount
+                        );
+                    }
+                }
                 loadLoanData();
                 
             } catch (NumberFormatException e) {
                 showAlert("Invalid Input", "Please enter a valid payment amount");
+                
+                // Log invalid input
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "LOAN_MANAGEMENT_PAYMENT_FAILED",
+                        "MEDIUM",
+                        currentUser,
+                        "Invalid payment input format - Loan ID: " + loanId + 
+                        ", Input: " + result.get()
+                    );
+                }
+            }
+        } else {
+            // Log payment cancelled
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "LOAN_MANAGEMENT_PAYMENT_CANCELLED",
+                    "MEDIUM",
+                    currentUser,
+                    "Cancelled processing payment - Loan ID: " + loanId
+                );
             }
         }
     }
@@ -246,21 +621,84 @@ public class LoanManagementController implements Initializable {
         LoanRecord selected = table.getSelectionModel().getSelectedItem();
         if (selected == null) {
             showAlert("No Selection", "Please select a loan record to mark as complete");
+            
+            // Log failed mark complete attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "LOAN_MANAGEMENT_MARK_COMPLETE_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Attempted to mark loan as complete but no record was selected"
+                );
+            }
             return;
+        }
+        
+        // Log mark complete click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        String loanId = selected.getId();
+        String employeeName = selected.getEmployeeName();
+        String loanType = selected.getLoanType();
+        String balance = selected.getBalance();
+        
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "LOAN_MANAGEMENT_MARK_COMPLETE_CLICK",
+                "HIGH",
+                currentUser,
+                "Clicked Mark Complete button - Loan ID: " + loanId + 
+                ", Employee: " + employeeName + 
+                ", Loan Type: " + loanType + 
+                ", Remaining Balance: " + balance
+            );
         }
         
         Alert confirmAlert = new Alert(AlertType.CONFIRMATION);
         confirmAlert.setTitle("Mark Loan Complete");
         confirmAlert.setHeaderText("Mark Loan as Completed");
         confirmAlert.setContentText("Are you sure you want to mark this loan as completed?\n" +
-                                  "Employee: " + selected.getEmployeeName() + "\n" +
-                                  "Loan Type: " + selected.getLoanType() + "\n" +
-                                  "Remaining Balance: " + selected.getBalance());
+                                  "Employee: " + employeeName + "\n" +
+                                  "Loan Type: " + loanType + "\n" +
+                                  "Remaining Balance: " + balance);
         
         confirmAlert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
-                markLoanCompleted(Integer.parseInt(selected.getId()));
+                if (markLoanCompleted(Integer.parseInt(loanId))) {
+                    // Log successful mark complete
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "LOAN_MANAGEMENT_MARK_COMPLETE_SUCCESS",
+                            "HIGH",
+                            currentUser,
+                            "Marked loan as completed - Loan ID: " + loanId + 
+                            ", Employee: " + employeeName + 
+                            ", Loan Type: " + loanType + 
+                            ", Previous Balance: " + balance
+                        );
+                    }
+                } else {
+                    // Log failed mark complete
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "LOAN_MANAGEMENT_MARK_COMPLETE_FAILED",
+                            "HIGH",
+                            currentUser,
+                            "Failed to mark loan as completed - Loan ID: " + loanId
+                        );
+                    }
+                }
                 loadLoanData();
+            } else {
+                // Log mark complete cancelled
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "LOAN_MANAGEMENT_MARK_COMPLETE_CANCELLED",
+                        "MEDIUM",
+                        currentUser,
+                        "Cancelled marking loan as completed - Loan ID: " + loanId
+                    );
+                }
             }
         });
     }
@@ -269,6 +707,20 @@ public class LoanManagementController implements Initializable {
     private void onSearch() {
         String searchText = searchField.getText().trim();
         String selectedType = loanTypeFilter.getValue();
+        
+        // Log search activity (only if there's actual search criteria)
+        if (!searchText.isEmpty() || (selectedType != null && !"All Types".equals(selectedType))) {
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "LOAN_MANAGEMENT_SEARCH",
+                    "LOW",
+                    currentUser,
+                    "Searched loans - Keyword: '" + (searchText.isEmpty() ? "(none)" : searchText) + 
+                    "', Loan Type: " + (selectedType != null ? selectedType : "All")
+                );
+            }
+        }
         
         if (searchText.isEmpty() && "All Types".equals(selectedType)) {
             loadLoanData();
@@ -311,43 +763,151 @@ public class LoanManagementController implements Initializable {
             ResultSet rs = stmt.executeQuery();
             loanData.clear();
             
+            int resultCount = 0;
             while (rs.next()) {
                 LoanRecord loan = createLoanRecordFromResultSet(rs);
                 loanData.add(loan);
+                resultCount++;
+            }
+            
+            // Log search results
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null && (!searchText.isEmpty() || (selectedType != null && !"All Types".equals(selectedType)))) {
+                SecurityLogger.logSecurityEvent(
+                    "LOAN_MANAGEMENT_SEARCH_RESULTS",
+                    "LOW",
+                    currentUser,
+                    "Search completed - Keyword: '" + (searchText.isEmpty() ? "(none)" : searchText) + 
+                    "', Loan Type: " + (selectedType != null ? selectedType : "All") + 
+                    ", Results: " + resultCount + " records"
+                );
             }
             
         } catch (SQLException e) {
             logger.log(Level.SEVERE, "Error searching loan records", e);
+            
+            // Log search error
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "LOAN_MANAGEMENT_SEARCH_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Failed to search loans - Error: " + e.getMessage()
+                );
+            }
+            
             showAlert("Database Error", "Could not search loan records: " + e.getMessage());
         }
     }
     
-    private Dialog<LoanData> createLoanDialog(String title, LoanData existingData) {
+    private Dialog<LoanData> createLoanDialog(String title, LoanData existingData, int loanId) {
         Dialog<LoanData> dialog = new Dialog<>();
         dialog.setTitle(title);
-        dialog.setHeaderText("Enter loan details");
         
-        // Set the button types
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        // Remove default header
+        dialog.setHeaderText(null);
         
-        // Create the form
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(20, 150, 10, 10));
+        // Custom button types with styled appearance
+        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
+
+        // Create main container with green gradient background
+        javafx.scene.layout.VBox mainContainer = new javafx.scene.layout.VBox();
+        mainContainer.setStyle("-fx-background-color: linear-gradient(to bottom right, #2e7d32, #66bb6a); -fx-padding: 0;");
         
+        // Create content container with white background
+        javafx.scene.layout.VBox contentContainer = new javafx.scene.layout.VBox();
+        contentContainer.setStyle("-fx-background-color: white;");
+        contentContainer.setPadding(new javafx.geometry.Insets(40, 40, 40, 40));
+        contentContainer.setSpacing(20);
+        
+        // Title Label
+        Label titleLabel = new Label(title);
+        titleLabel.setStyle(
+            "-fx-text-fill: #1b5e20; " +
+            "-fx-font-size: 24px; " +
+            "-fx-font-weight: bold; " +
+            "-fx-alignment: center;"
+        );
+        
+        // Form fields container
+        javafx.scene.layout.VBox formContainer = new javafx.scene.layout.VBox();
+        formContainer.setSpacing(18);
+        
+        // Styled input fields
+        String fieldStyle = 
+            "-fx-background-radius: 8; " +
+            "-fx-border-radius: 8; " +
+            "-fx-border-color: #c8e6c9; " +
+            "-fx-border-width: 1; " +
+            "-fx-focus-color: #66bb6a; " +
+            "-fx-faint-focus-color: transparent; " +
+            "-fx-padding: 6 10 6 10; " +
+            "-fx-font-size: 14px; " +
+            "-fx-pref-width: 350;";
+            
+        String labelStyle = 
+            "-fx-text-fill: #1b5e20; " +
+            "-fx-font-size: 14px; " +
+            "-fx-font-weight: bold;";
+
+        // Employee field
+        javafx.scene.layout.VBox employeeContainer = new javafx.scene.layout.VBox(8);
+        Label employeeLabel = new Label("Employee");
+        employeeLabel.setStyle(labelStyle);
         ComboBox<String> employeeCombo = new ComboBox<>();
-        ComboBox<String> loanTypeCombo = new ComboBox<>();
-        TextField loanAmountField = new TextField();
-        TextField monthlyAmortizationField = new TextField();
-        DatePicker startDatePicker = new DatePicker();
-        
-        // Load employees and loan types
+        employeeCombo.setPromptText("Select employee");
+        employeeCombo.setStyle(fieldStyle);
         loadEmployeesIntoComboBox(employeeCombo);
-        loanTypeCombo.getItems().addAll("Pag-IBIG Loan", "SSS Loan", "Company Loan");
+        employeeContainer.getChildren().addAll(employeeLabel, employeeCombo);
         
+        // Loan Type field
+        javafx.scene.layout.VBox loanTypeContainer = new javafx.scene.layout.VBox(8);
+        Label loanTypeLabel = new Label("Loan Type");
+        loanTypeLabel.setStyle(labelStyle);
+        ComboBox<String> loanTypeCombo = new ComboBox<>();
+        loanTypeCombo.setPromptText("Select loan type");
+        loanTypeCombo.setStyle(fieldStyle);
+        loadLoanTypesIntoComboBox(loanTypeCombo);
+        loanTypeContainer.getChildren().addAll(loanTypeLabel, loanTypeCombo);
+        
+        // Loan Amount field
+        javafx.scene.layout.VBox loanAmountContainer = new javafx.scene.layout.VBox(8);
+        Label loanAmountLabel = new Label("Loan Amount (₱)");
+        loanAmountLabel.setStyle(labelStyle);
+        TextField loanAmountField = new TextField();
+        loanAmountField.setPromptText("Enter loan amount (e.g., 50000.00)");
+        loanAmountField.setStyle(fieldStyle);
+        loanAmountContainer.getChildren().addAll(loanAmountLabel, loanAmountField);
+        
+        // Monthly Amortization field
+        javafx.scene.layout.VBox monthlyAmortContainer = new javafx.scene.layout.VBox(8);
+        Label monthlyAmortLabel = new Label("Monthly Amortization (₱)");
+        monthlyAmortLabel.setStyle(labelStyle);
+        TextField monthlyAmortizationField = new TextField();
+        monthlyAmortizationField.setPromptText("Enter monthly amortization (e.g., 2000.00)");
+        monthlyAmortizationField.setStyle(fieldStyle);
+        monthlyAmortContainer.getChildren().addAll(monthlyAmortLabel, monthlyAmortizationField);
+        
+        // Start Date field
+        javafx.scene.layout.VBox startDateContainer = new javafx.scene.layout.VBox(8);
+        Label startDateLabel = new Label("Start Date");
+        startDateLabel.setStyle(labelStyle);
+        DatePicker startDatePicker = new DatePicker();
+        startDatePicker.setStyle(fieldStyle);
+        startDateContainer.getChildren().addAll(startDateLabel, startDatePicker);
+
         // Set existing data if editing
         if (existingData != null) {
+            // Set employee
+            for (String item : employeeCombo.getItems()) {
+                if (item.startsWith(existingData.employeeId + " - ")) {
+                    employeeCombo.setValue(item);
+                    break;
+                }
+            }
+            
             loanTypeCombo.setValue(existingData.loanType);
             loanAmountField.setText(existingData.loanAmount.toString());
             monthlyAmortizationField.setText(existingData.monthlyAmortization.toString());
@@ -355,23 +915,101 @@ public class LoanManagementController implements Initializable {
         } else {
             startDatePicker.setValue(LocalDate.now());
         }
+
+        // Add all form elements to form container
+        formContainer.getChildren().addAll(
+            employeeContainer,
+            loanTypeContainer,
+            loanAmountContainer,
+            monthlyAmortContainer,
+            startDateContainer
+        );
         
-        grid.add(new Label("Employee:"), 0, 0);
-        grid.add(employeeCombo, 1, 0);
-        grid.add(new Label("Loan Type:"), 0, 1);
-        grid.add(loanTypeCombo, 1, 1);
-        grid.add(new Label("Loan Amount (₱):"), 0, 2);
-        grid.add(loanAmountField, 1, 2);
-        grid.add(new Label("Monthly Amortization (₱):"), 0, 3);
-        grid.add(monthlyAmortizationField, 1, 3);
-        grid.add(new Label("Start Date:"), 0, 4);
-        grid.add(startDatePicker, 1, 4);
+        // Add all elements to content container
+        contentContainer.getChildren().addAll(titleLabel, formContainer);
         
-        dialog.getDialogPane().setContent(grid);
+        // Add content to main container with minimal padding
+        mainContainer.getChildren().add(contentContainer);
+        mainContainer.setPadding(new javafx.geometry.Insets(0));
         
-        // Convert the result when the OK button is clicked
+        dialog.getDialogPane().setContent(mainContainer);
+        
+        // Style the buttons
+        dialog.getDialogPane().lookupButton(saveButtonType).setStyle(
+            "-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); " +
+            "-fx-text-fill: white; " +
+            "-fx-font-weight: bold; " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 10 20 10 20; " +
+            "-fx-font-size: 14px;"
+        );
+        
+        dialog.getDialogPane().lookupButton(ButtonType.CANCEL).setStyle(
+            "-fx-background-color: #f5f5f5; " +
+            "-fx-text-fill: #666; " +
+            "-fx-background-radius: 8; " +
+            "-fx-padding: 10 20 10 20; " +
+            "-fx-font-size: 14px; " +
+            "-fx-border-color: #ddd; " +
+            "-fx-border-radius: 8;"
+        );
+        
+        // Set dialog size
+        dialog.getDialogPane().setPrefWidth(450);
+        dialog.getDialogPane().setPrefHeight(550);
+
+        // Add validation
+        dialog.getDialogPane().lookupButton(saveButtonType).addEventFilter(javafx.event.ActionEvent.ACTION, event -> {
+            if (employeeCombo.getValue() == null) {
+                showAlert("Validation Error", "Please select an employee.");
+                event.consume();
+                return;
+            }
+            if (loanTypeCombo.getValue() == null) {
+                showAlert("Validation Error", "Please select a loan type.");
+                event.consume();
+                return;
+            }
+            if (loanAmountField.getText().trim().isEmpty()) {
+                showAlert("Validation Error", "Loan amount is required.");
+                event.consume();
+                return;
+            }
+            if (monthlyAmortizationField.getText().trim().isEmpty()) {
+                showAlert("Validation Error", "Monthly amortization is required.");
+                event.consume();
+                return;
+            }
+            if (startDatePicker.getValue() == null) {
+                showAlert("Validation Error", "Start date is required.");
+                event.consume();
+                return;
+            }
+            
+            // Validate numeric amounts
+            try {
+                BigDecimal loanAmount = new BigDecimal(loanAmountField.getText().trim());
+                if (loanAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                    showAlert("Validation Error", "Loan amount must be greater than 0.");
+                    event.consume();
+                    return;
+                }
+                
+                BigDecimal monthlyAmort = new BigDecimal(monthlyAmortizationField.getText().trim());
+                if (monthlyAmort.compareTo(BigDecimal.ZERO) <= 0) {
+                    showAlert("Validation Error", "Monthly amortization must be greater than 0.");
+                    event.consume();
+                    return;
+                }
+            } catch (NumberFormatException e) {
+                showAlert("Validation Error", "Please enter valid numeric amounts.");
+                event.consume();
+                return;
+            }
+        });
+
         dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == ButtonType.OK) {
+            if (dialogButton == saveButtonType) {
                 try {
                     LoanData data = new LoanData();
                     String selectedEmployee = employeeCombo.getValue();
@@ -379,18 +1017,9 @@ public class LoanManagementController implements Initializable {
                         data.employeeId = Integer.parseInt(selectedEmployee.split(" - ")[0]);
                     }
                     data.loanType = loanTypeCombo.getValue();
-                    data.loanAmount = new BigDecimal(loanAmountField.getText());
-                    data.monthlyAmortization = new BigDecimal(monthlyAmortizationField.getText());
+                    data.loanAmount = new BigDecimal(loanAmountField.getText().trim());
+                    data.monthlyAmortization = new BigDecimal(monthlyAmortizationField.getText().trim());
                     data.startDate = startDatePicker.getValue();
-                    
-                    // Validate data
-                    if (data.employeeId == 0 || data.loanType == null || 
-                        data.loanAmount.compareTo(BigDecimal.ZERO) <= 0 ||
-                        data.monthlyAmortization.compareTo(BigDecimal.ZERO) <= 0 ||
-                        data.startDate == null) {
-                        showAlert("Invalid Input", "Please fill in all required fields with valid values");
-                        return null;
-                    }
                     
                     return data;
                     
@@ -401,8 +1030,23 @@ public class LoanManagementController implements Initializable {
             }
             return null;
         });
-        
+
         return dialog;
+    }
+    
+    private void loadLoanTypesIntoComboBox(ComboBox<String> comboBox) {
+        String sql = "SELECT DISTINCT name FROM loan_types ORDER BY name";
+        
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            ResultSet rs = stmt.executeQuery();
+            
+            while (rs.next()) {
+                comboBox.getItems().add(rs.getString("name"));
+            }
+            
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error loading loan types", e);
+        }
     }
     
     private void loadEmployeesIntoComboBox(ComboBox<String> comboBox) {
@@ -421,8 +1065,12 @@ public class LoanManagementController implements Initializable {
         }
     }
     
-    private void addLoan(LoanData loanData) {
-        String sql = "INSERT INTO employee_loans (employee_id, loan_type_id, loan_amount, monthly_amortization, balance, start_date) VALUES (?, ?, ?, ?, ?, ?)";
+    private boolean addLoan(LoanData loanData) {
+        String sql = """
+            INSERT INTO employee_loans 
+            (employee_id, loan_type_id, loan_amount, monthly_amortization, balance, start_date) 
+            VALUES (?, ?, ?, ?, ?, ?)
+            """;
         
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             int loanTypeId = getLoanTypeId(loanData.loanType);
@@ -432,21 +1080,23 @@ public class LoanManagementController implements Initializable {
             stmt.setBigDecimal(3, loanData.loanAmount);
             stmt.setBigDecimal(4, loanData.monthlyAmortization);
             stmt.setBigDecimal(5, loanData.loanAmount); // Initial balance is loan amount
-            stmt.setDate(6, Date.valueOf(loanData.startDate));
+            stmt.setDate(6, java.sql.Date.valueOf(loanData.startDate));
             
             int rowsAffected = stmt.executeUpdate();
             if (rowsAffected > 0) {
                 showAlert("Success", "Loan added successfully!");
                 logger.info("Added loan for employee ID: " + loanData.employeeId);
+                return true;
             }
             
         } catch (SQLException e) {
             logger.log(Level.SEVERE, "Error adding loan", e);
             showAlert("Database Error", "Could not add loan: " + e.getMessage());
         }
+        return false;
     }
     
-    private void updateLoan(int loanId, LoanData loanData) {
+    private boolean updateLoan(int loanId, LoanData loanData) {
         String sql = "UPDATE employee_loans SET loan_type_id = ?, loan_amount = ?, monthly_amortization = ?, start_date = ? WHERE id = ?";
         
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
@@ -462,16 +1112,23 @@ public class LoanManagementController implements Initializable {
             if (rowsAffected > 0) {
                 showAlert("Success", "Loan updated successfully!");
                 logger.info("Updated loan ID: " + loanId);
+                return true;
             }
             
         } catch (SQLException e) {
             logger.log(Level.SEVERE, "Error updating loan", e);
             showAlert("Database Error", "Could not update loan: " + e.getMessage());
         }
+        return false;
     }
     
-    private void processLoanPayment(int loanId, BigDecimal paymentAmount) {
-        String sql = "UPDATE employee_loans SET balance = GREATEST(0, balance - ?), status = CASE WHEN balance - ? <= 0 THEN 'Completed' ELSE status END WHERE id = ?";
+    private boolean processLoanPayment(int loanId, BigDecimal paymentAmount) {
+        String sql = """
+            UPDATE employee_loans 
+            SET balance = GREATEST(0, balance - ?), 
+                status = CASE WHEN balance - ? <= 0 THEN 'Completed' ELSE status END 
+            WHERE id = ?
+            """;
         
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setBigDecimal(1, paymentAmount);
@@ -482,16 +1139,18 @@ public class LoanManagementController implements Initializable {
             if (rowsAffected > 0) {
                 showAlert("Success", "Payment processed successfully!");
                 logger.info("Processed payment for loan ID: " + loanId + ", Amount: " + paymentAmount);
+                return true;
             }
             
         } catch (SQLException e) {
             logger.log(Level.SEVERE, "Error processing loan payment", e);
             showAlert("Database Error", "Could not process payment: " + e.getMessage());
         }
+        return false;
     }
     
-    private void markLoanCompleted(int loanId) {
-        String sql = "UPDATE employee_loans SET status = 'Completed', end_date = CURDATE(), balance = 0 WHERE id = ?";
+    private boolean markLoanCompleted(int loanId) {
+        String sql = "UPDATE employee_loans SET status = 'Completed', balance = 0, end_date = CURDATE() WHERE id = ?";
         
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setInt(1, loanId);
@@ -500,12 +1159,14 @@ public class LoanManagementController implements Initializable {
             if (rowsAffected > 0) {
                 showAlert("Success", "Loan marked as completed successfully!");
                 logger.info("Marked loan as completed, ID: " + loanId);
+                return true;
             }
             
         } catch (SQLException e) {
             logger.log(Level.SEVERE, "Error marking loan as completed", e);
             showAlert("Database Error", "Could not mark loan as completed: " + e.getMessage());
         }
+        return false;
     }
     
     private int getLoanTypeId(String loanTypeName) throws SQLException {
@@ -526,8 +1187,9 @@ public class LoanManagementController implements Initializable {
     private void loadLoanData() {
         String sql = """
             SELECT el.id, el.employee_id, e.full_name as employee_name, 
-                   lt.name as loan_type, el.loan_amount, el.monthly_amortization,
-                   el.balance, el.start_date, el.end_date, el.status
+                   lt.name as loan_type, el.loan_amount, 
+                   el.monthly_amortization, el.balance, 
+                   el.start_date, el.end_date, el.status
             FROM employee_loans el
             JOIN employees e ON el.employee_id = e.id
             JOIN loan_types lt ON el.loan_type_id = lt.id

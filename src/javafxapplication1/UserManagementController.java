@@ -46,6 +46,18 @@ public class UserManagementController implements Initializable {
     @FXML private TableColumn<SystemUser, String> colUserStatus;
     @FXML private TableColumn<SystemUser, String> colLastLogin;
     @FXML private TableColumn<SystemUser, String> colCreatedDate;
+    
+    // Action buttons
+    @FXML private Button refreshButton;
+    @FXML private Button exportUsersButton;
+    @FXML private Button searchButton;
+    @FXML private Button clearFiltersButton;
+    @FXML private Button addUserButton;
+    @FXML private Button editUserButton;
+    @FXML private Button deleteUserButton;
+    @FXML private Button assignRoleButton;
+    @FXML private Button resetPasswordButton;
+    @FXML private Button toggleStatusButton;
 
     // Data Collections
     private final ObservableList<SystemUser> users = FXCollections.observableArrayList();
@@ -70,6 +82,182 @@ public class UserManagementController implements Initializable {
         updateAllUserPasswords(); // Update all users to use new hashing system
         fixAdminPassword(); // Ensure admin has correct password
         fixStaffPassword(); // Ensure staff has correct password
+        
+        // Setup permission-based button visibility
+        setupPermissionBasedVisibility();
+        
+        // Log module access
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_MANAGEMENT_MODULE_ACCESS",
+                "LOW",
+                currentUser,
+                "Accessed User Management module"
+            );
+        }
+    }
+    
+    private void setupPermissionBasedVisibility() {
+        try {
+            // Get current user from SessionManager
+            SessionManager sessionManager = SessionManager.getInstance();
+            
+            if (sessionManager.isLoggedIn()) {
+                String currentUser = sessionManager.getCurrentUser();
+                logger.info("Setting up permission-based visibility for user: " + currentUser);
+                
+                // Check user permissions
+                boolean canView = hasUserPermission(currentUser, "user_mgmt.view");
+                boolean canAdd = hasUserPermission(currentUser, "user_mgmt.add");
+                boolean canEdit = hasUserPermission(currentUser, "user_mgmt.edit");
+                boolean canDelete = hasUserPermission(currentUser, "user_mgmt.delete");
+                
+                // Show/hide buttons based on permissions
+                // View permissions: Refresh, Export Users, Search, Clear Filters
+                if (refreshButton != null) {
+                    refreshButton.setVisible(canView);
+                    refreshButton.setManaged(canView);
+                }
+                if (exportUsersButton != null) {
+                    exportUsersButton.setVisible(canView);
+                    exportUsersButton.setManaged(canView);
+                }
+                if (searchButton != null) {
+                    searchButton.setVisible(canView);
+                    searchButton.setManaged(canView);
+                }
+                if (clearFiltersButton != null) {
+                    clearFiltersButton.setVisible(canView);
+                    clearFiltersButton.setManaged(canView);
+                }
+                
+                // Add permission
+                if (addUserButton != null) {
+                    addUserButton.setVisible(canAdd);
+                    addUserButton.setManaged(canAdd);
+                }
+                
+                // Edit permissions: Edit User, Assign Role, Reset Password, Toggle Status
+                if (editUserButton != null) {
+                    editUserButton.setVisible(canEdit);
+                    editUserButton.setManaged(canEdit);
+                }
+                if (assignRoleButton != null) {
+                    assignRoleButton.setVisible(canEdit);
+                    assignRoleButton.setManaged(canEdit);
+                }
+                if (resetPasswordButton != null) {
+                    resetPasswordButton.setVisible(canEdit);
+                    resetPasswordButton.setManaged(canEdit);
+                }
+                if (toggleStatusButton != null) {
+                    toggleStatusButton.setVisible(canEdit);
+                    toggleStatusButton.setManaged(canEdit);
+                }
+                
+                // Delete permission
+                if (deleteUserButton != null) {
+                    deleteUserButton.setVisible(canDelete);
+                    deleteUserButton.setManaged(canDelete);
+                }
+                
+                logger.info("User Management buttons visibility - View: " + canView + ", Add: " + canAdd + ", Edit: " + canEdit + ", Delete: " + canDelete);
+                
+            } else {
+                logger.warning("No user session found, hiding all action buttons");
+                hideAllActionButtons();
+            }
+            
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error setting up permission-based visibility", e);
+            hideAllActionButtons();
+        }
+    }
+    
+    private void hideAllActionButtons() {
+        if (refreshButton != null) {
+            refreshButton.setVisible(false);
+            refreshButton.setManaged(false);
+        }
+        if (exportUsersButton != null) {
+            exportUsersButton.setVisible(false);
+            exportUsersButton.setManaged(false);
+        }
+        if (searchButton != null) {
+            searchButton.setVisible(false);
+            searchButton.setManaged(false);
+        }
+        if (clearFiltersButton != null) {
+            clearFiltersButton.setVisible(false);
+            clearFiltersButton.setManaged(false);
+        }
+        if (addUserButton != null) {
+            addUserButton.setVisible(false);
+            addUserButton.setManaged(false);
+        }
+        if (editUserButton != null) {
+            editUserButton.setVisible(false);
+            editUserButton.setManaged(false);
+        }
+        if (deleteUserButton != null) {
+            deleteUserButton.setVisible(false);
+            deleteUserButton.setManaged(false);
+        }
+        if (assignRoleButton != null) {
+            assignRoleButton.setVisible(false);
+            assignRoleButton.setManaged(false);
+        }
+        if (resetPasswordButton != null) {
+            resetPasswordButton.setVisible(false);
+            resetPasswordButton.setManaged(false);
+        }
+        if (toggleStatusButton != null) {
+            toggleStatusButton.setVisible(false);
+            toggleStatusButton.setManaged(false);
+        }
+    }
+    
+    private boolean hasUserPermission(String username, String permissionName) {
+        try {
+            if (connection == null || connection.isClosed()) {
+                logger.warning("Database connection not available, defaulting to admin permissions for user: " + username);
+                return username != null && username.equals("admin");
+            }
+            
+            // Get user's role from database
+            String getRoleQuery = "SELECT role FROM users WHERE username = ?";
+            PreparedStatement getRoleStmt = connection.prepareStatement(getRoleQuery);
+            getRoleStmt.setString(1, username);
+            ResultSet roleRs = getRoleStmt.executeQuery();
+            
+            if (roleRs.next()) {
+                String userRole = roleRs.getString("role");
+                
+                // Check if role has the permission
+                String checkPermissionQuery = "SELECT COUNT(*) FROM role_permissions rp " +
+                                           "JOIN roles r ON rp.role_id = r.role_id " +
+                                           "JOIN permissions p ON rp.permission_id = p.permission_id " +
+                                           "WHERE r.role_name = ? AND p.permission_name = ? AND rp.granted = TRUE";
+                PreparedStatement checkPermissionStmt = connection.prepareStatement(checkPermissionQuery);
+                checkPermissionStmt.setString(1, userRole);
+                checkPermissionStmt.setString(2, permissionName);
+                ResultSet permissionRs = checkPermissionStmt.executeQuery();
+                
+                if (permissionRs.next()) {
+                    boolean hasPermission = permissionRs.getInt(1) > 0;
+                    logger.info("User " + username + " (Role: " + userRole + ") has permission " + permissionName + ": " + hasPermission);
+                    return hasPermission;
+                }
+            }
+            
+            return false;
+            
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error checking user permission", e);
+            // If database error occurs, default to admin permissions for admin user
+            return username != null && username.equals("admin");
+        }
     }
     
     private void initializeDatabase() {
@@ -343,6 +531,22 @@ public class UserManagementController implements Initializable {
         String roleFilterValue = roleFilter.getValue();
         String statusFilterValue = statusFilter.getValue();
         
+        // Log search activity (only if there's actual search criteria)
+        if (!searchText.isEmpty() || (roleFilterValue != null && !roleFilterValue.equals("All Roles")) || 
+            (statusFilterValue != null && !statusFilterValue.equals("All Status"))) {
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_MANAGEMENT_SEARCH",
+                    "LOW",
+                    currentUser,
+                    "Searched users - Keyword: '" + (searchText.isEmpty() ? "(none)" : searchText) + 
+                    "', Role: " + (roleFilterValue != null ? roleFilterValue : "All") + 
+                    ", Status: " + (statusFilterValue != null ? statusFilterValue : "All")
+                );
+            }
+        }
+        
         ObservableList<SystemUser> filteredUsers = users.filtered(user -> {
             boolean matchesSearch = searchText.isEmpty() || 
                 user.getUsername().toLowerCase().contains(searchText) ||
@@ -359,10 +563,33 @@ public class UserManagementController implements Initializable {
         });
         
         userTable.setItems(filteredUsers);
+        
+        // Log search results
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null && (!searchText.isEmpty() || (roleFilterValue != null && !roleFilterValue.equals("All Roles")) || 
+            (statusFilterValue != null && !statusFilterValue.equals("All Status")))) {
+            SecurityLogger.logSecurityEvent(
+                "USER_MANAGEMENT_SEARCH_RESULTS",
+                "LOW",
+                currentUser,
+                "Search completed - Results: " + filteredUsers.size() + " users found"
+            );
+        }
     }
 
     @FXML
     private void onClearFilters() {
+        // Log clear filters
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_MANAGEMENT_CLEAR_FILTERS",
+                "LOW",
+                currentUser,
+                "Cleared all user filters"
+            );
+        }
+        
         userSearchField.clear();
         roleFilter.setValue("All Roles");
         statusFilter.setValue("All Status");
@@ -371,67 +598,232 @@ public class UserManagementController implements Initializable {
 
     @FXML
     private void onAddUser() {
+        // Log add click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_MANAGEMENT_ADD_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Add User button"
+            );
+        }
+        
         Dialog<SystemUser> dialog = buildUserDialog(null);
         Optional<SystemUser> result = dialog.showAndWait();
-        result.ifPresent(user -> {
+        
+        if (result.isPresent()) {
+            SystemUser user = result.get();
             if (addUserToDatabase(user)) {
                 // Log user creation event
-                SecurityLogger.logSecurityEvent(
-                    "USER_CREATED",
-                    "MEDIUM",
-                    SessionManager.getInstance().getCurrentUser(),
-                    "New user account created: " + user.getUsername() + " (" + user.getFullName() + ") - Role: " + user.getRole() + " from " + SecurityLogger.getClientIP()
-                );
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_MANAGEMENT_ADD_SUCCESS",
+                        "MEDIUM",
+                        currentUser,
+                        "Added new user - Username: " + user.getUsername() + 
+                        ", Full Name: " + user.getFullName() + 
+                        ", Email: " + user.getEmail() + 
+                        ", Role: " + user.getRole() + 
+                        ", Status: " + user.getStatus()
+                    );
+                }
                 
                 loadUsersFromDatabase(); // Refresh the table
                 showInfo("Success", "User added successfully: " + user.getFullName());
+            } else {
+                // Log failed add
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_MANAGEMENT_ADD_FAILED",
+                        "MEDIUM",
+                        currentUser,
+                        "Failed to add user - Username: " + user.getUsername()
+                    );
+                }
             }
-        });
+        } else {
+            // Log add cancelled
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_MANAGEMENT_ADD_CANCELLED",
+                    "LOW",
+                    currentUser,
+                    "Cancelled adding user"
+                );
+            }
+        }
     }
 
     @FXML
     private void onEditUser() {
         if (selectedUser == null) {
             showError("No User Selected", "Please select a user to edit.");
+            
+            // Log failed edit attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_MANAGEMENT_EDIT_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Attempted to edit user but no user was selected"
+                );
+            }
             return;
+        }
+        
+        // Log edit click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        String oldUsername = selectedUser.getUsername();
+        String oldFullName = selectedUser.getFullName();
+        String oldEmail = selectedUser.getEmail();
+        String oldRole = selectedUser.getRole();
+        String oldStatus = selectedUser.getStatus();
+        
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_MANAGEMENT_EDIT_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Edit User button - User ID: " + selectedUser.getId() + 
+                ", Username: " + oldUsername
+            );
         }
         
         Dialog<SystemUser> dialog = buildUserDialog(selectedUser);
         Optional<SystemUser> result = dialog.showAndWait();
-        result.ifPresent(user -> {
+        
+        if (result.isPresent()) {
+            SystemUser user = result.get();
             if (updateUserInDatabase(user)) {
                 // Log user update event
-                SecurityLogger.logSecurityEvent(
-                    "USER_UPDATED",
-                    "LOW",
-                    SessionManager.getInstance().getCurrentUser(),
-                    "User account updated: " + user.getUsername() + " (" + user.getFullName() + ") - Role: " + user.getRole() + " from " + SecurityLogger.getClientIP()
-                );
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_MANAGEMENT_EDIT_SUCCESS",
+                        "MEDIUM",
+                        currentUser,
+                        "Updated user - User ID: " + user.getId() + 
+                        ", Old Username: " + oldUsername + 
+                        ", New Username: " + user.getUsername() + 
+                        ", Old Full Name: " + oldFullName + 
+                        ", New Full Name: " + user.getFullName() + 
+                        ", Old Email: " + oldEmail + 
+                        ", New Email: " + user.getEmail() + 
+                        ", Old Role: " + oldRole + 
+                        ", New Role: " + user.getRole() + 
+                        ", Old Status: " + oldStatus + 
+                        ", New Status: " + user.getStatus()
+                    );
+                }
                 
                 loadUsersFromDatabase(); // Refresh the table
                 showInfo("Success", "User updated successfully: " + user.getFullName());
+            } else {
+                // Log failed update
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_MANAGEMENT_EDIT_FAILED",
+                        "MEDIUM",
+                        currentUser,
+                        "Failed to update user - User ID: " + user.getId()
+                    );
+                }
             }
-        });
+        } else {
+            // Log edit cancelled
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_MANAGEMENT_EDIT_CANCELLED",
+                    "LOW",
+                    currentUser,
+                    "Cancelled editing user - User ID: " + selectedUser.getId()
+                );
+            }
+        }
     }
 
     @FXML
     private void onDeleteUser() {
         if (selectedUser == null) {
             showError("No User Selected", "Please select a user to delete.");
+            
+            // Log failed delete attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_MANAGEMENT_DELETE_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Attempted to delete user but no user was selected"
+                );
+            }
             return;
+        }
+
+        // Log delete click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        int userId = selectedUser.getId();
+        String username = selectedUser.getUsername();
+        String fullName = selectedUser.getFullName();
+        String role = selectedUser.getRole();
+        
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_MANAGEMENT_DELETE_CLICK",
+                "HIGH",
+                currentUser,
+                "Clicked Delete User button - User ID: " + userId + 
+                ", Username: " + username + 
+                ", Full Name: " + fullName + 
+                ", Role: " + role
+            );
         }
 
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Delete User");
         alert.setHeaderText("Are you sure you want to delete this user?");
-        alert.setContentText("User: " + selectedUser.getFullName() + " (" + selectedUser.getUsername() + ")\nThis action cannot be undone.");
+        alert.setContentText("User: " + fullName + " (" + username + ")\nThis action cannot be undone.");
 
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
-                if (deleteUserFromDatabase(selectedUser.getId())) {
+                if (deleteUserFromDatabase(userId)) {
+                    // Log successful delete
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "USER_MANAGEMENT_DELETE_SUCCESS",
+                            "HIGH",
+                            currentUser,
+                            "Deleted user - User ID: " + userId + 
+                            ", Username: " + username + 
+                            ", Full Name: " + fullName + 
+                            ", Role: " + role
+                        );
+                    }
+                    
                     loadUsersFromDatabase(); // Refresh the table
-                selectedUser = null;
-                    showInfo("Success", "User deleted successfully: " + selectedUser.getFullName());
+                    selectedUser = null;
+                    showInfo("Success", "User deleted successfully: " + fullName);
+                } else {
+                    // Log failed delete
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "USER_MANAGEMENT_DELETE_FAILED",
+                            "HIGH",
+                            currentUser,
+                            "Failed to delete user - User ID: " + userId
+                        );
+                    }
+                }
+            } else {
+                // Log delete cancelled
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_MANAGEMENT_DELETE_CANCELLED",
+                        "MEDIUM",
+                        currentUser,
+                        "Cancelled deleting user - User ID: " + userId
+                    );
                 }
             }
         });
@@ -441,18 +833,70 @@ public class UserManagementController implements Initializable {
     private void onAssignRole() {
         if (selectedUser == null) {
             showError("No User Selected", "Please select a user to assign a role to.");
+            
+            // Log failed assign role attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_MANAGEMENT_ASSIGN_ROLE_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Attempted to assign role but no user was selected"
+                );
+            }
             return;
         }
 
-        ChoiceDialog<String> dialog = new ChoiceDialog<>(selectedUser.getRole(), roleOptions.subList(1, roleOptions.size()));
+        // Log assign role click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        int userId = selectedUser.getId();
+        String username = selectedUser.getUsername();
+        String oldRole = selectedUser.getRole();
+        
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_MANAGEMENT_ASSIGN_ROLE_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Assign Role button - User ID: " + userId + 
+                ", Username: " + username + 
+                ", Current Role: " + oldRole
+            );
+        }
+
+        ChoiceDialog<String> dialog = new ChoiceDialog<>(oldRole, roleOptions.subList(1, roleOptions.size()));
         dialog.setTitle("Assign Role");
         dialog.setHeaderText("Select a role for user: " + selectedUser.getFullName());
         dialog.setContentText("Choose role:");
 
         dialog.showAndWait().ifPresent(role -> {
-            if (updateUserRoleInDatabase(selectedUser.getId(), role)) {
+            if (updateUserRoleInDatabase(userId, role)) {
+                // Log successful role assignment
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_MANAGEMENT_ASSIGN_ROLE_SUCCESS",
+                        "MEDIUM",
+                        currentUser,
+                        "Assigned role to user - User ID: " + userId + 
+                        ", Username: " + username + 
+                        ", Old Role: " + oldRole + 
+                        ", New Role: " + role
+                    );
+                }
+                
                 loadUsersFromDatabase(); // Refresh the table
                 showInfo("Success", "Role assigned successfully: " + role);
+            } else {
+                // Log failed role assignment
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_MANAGEMENT_ASSIGN_ROLE_FAILED",
+                        "MEDIUM",
+                        currentUser,
+                        "Failed to assign role - User ID: " + userId + 
+                        ", New Role: " + role
+                    );
+                }
             }
         });
     }
@@ -461,12 +905,40 @@ public class UserManagementController implements Initializable {
     private void onResetPassword() {
         if (selectedUser == null) {
             showError("No User Selected", "Please select a user to reset password for.");
+            
+            // Log failed reset password attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_MANAGEMENT_RESET_PASSWORD_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Attempted to reset password but no user was selected"
+                );
+            }
             return;
+        }
+
+        // Log reset password click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        int userId = selectedUser.getId();
+        String username = selectedUser.getUsername();
+        String fullName = selectedUser.getFullName();
+        
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_MANAGEMENT_RESET_PASSWORD_CLICK",
+                "HIGH",
+                currentUser,
+                "Clicked Reset Password button - User ID: " + userId + 
+                ", Username: " + username + 
+                ", Full Name: " + fullName
+            );
         }
 
         Alert confirmAlert = new Alert(Alert.AlertType.CONFIRMATION);
         confirmAlert.setTitle("Reset Password");
-        confirmAlert.setHeaderText("Reset password for user: " + selectedUser.getFullName());
+        confirmAlert.setHeaderText("Reset password for user: " + fullName);
         confirmAlert.setContentText("This will generate a temporary password for the user.\nContinue?");
 
         confirmAlert.showAndWait().ifPresent(response -> {
@@ -475,21 +947,45 @@ public class UserManagementController implements Initializable {
                 String tempPassword = generateTempPassword();
                 
                 // Update password in database
-                if (updateUserPasswordInDatabase(selectedUser.getId(), tempPassword)) {
+                if (updateUserPasswordInDatabase(userId, tempPassword)) {
                     // Log password reset event
-                    SecurityLogger.logSecurityEvent(
-                        "PASSWORD_RESET",
-                        "MEDIUM",
-                        SessionManager.getInstance().getCurrentUser(),
-                        "Password reset for user: " + selectedUser.getUsername() + " (" + selectedUser.getFullName() + ") - Temporary password generated from " + SecurityLogger.getClientIP()
-                    );
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "USER_MANAGEMENT_RESET_PASSWORD_SUCCESS",
+                            "HIGH",
+                            currentUser,
+                            "Reset password for user - User ID: " + userId + 
+                            ", Username: " + username + 
+                            ", Full Name: " + fullName + 
+                            " (Temporary password generated)"
+                        );
+                    }
                     
                     // Show custom dialog with copy button
-                    showPasswordResetDialog(selectedUser.getFullName(), tempPassword);
+                    showPasswordResetDialog(fullName, tempPassword);
                     loadUsersFromDatabase(); // Refresh table
-                    logger.info("Password reset for user: " + selectedUser.getUsername() + " - New password: " + tempPassword);
+                    logger.info("Password reset for user: " + username + " - New password: " + tempPassword);
                 } else {
+                    // Log failed password reset
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "USER_MANAGEMENT_RESET_PASSWORD_FAILED",
+                            "HIGH",
+                            currentUser,
+                            "Failed to reset password - User ID: " + userId
+                        );
+                    }
                     showError("Reset Failed", "Failed to reset password. Please try again.");
+                }
+            } else {
+                // Log reset password cancelled
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_MANAGEMENT_RESET_PASSWORD_CANCELLED",
+                        "MEDIUM",
+                        currentUser,
+                        "Cancelled resetting password - User ID: " + userId
+                    );
                 }
             }
         });
@@ -499,22 +995,84 @@ public class UserManagementController implements Initializable {
     private void onToggleStatus() {
         if (selectedUser == null) {
             showError("No User Selected", "Please select a user to toggle status for.");
+            
+            // Log failed toggle status attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_MANAGEMENT_TOGGLE_STATUS_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Attempted to toggle user status but no user was selected"
+                );
+            }
             return;
         }
 
         String currentStatus = selectedUser.getStatus();
         String newStatus = currentStatus.equals("Active") ? "Inactive" : "Active";
         
+        // Log toggle status click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        int userId = selectedUser.getId();
+        String username = selectedUser.getUsername();
+        String fullName = selectedUser.getFullName();
+        
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_MANAGEMENT_TOGGLE_STATUS_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Toggle Status button - User ID: " + userId + 
+                ", Username: " + username + 
+                ", Current Status: " + currentStatus + 
+                ", New Status: " + newStatus
+            );
+        }
+        
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Toggle User Status");
         alert.setHeaderText("Change user status from " + currentStatus + " to " + newStatus + "?");
-        alert.setContentText("User: " + selectedUser.getFullName());
+        alert.setContentText("User: " + fullName);
 
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
-                if (updateUserStatusInDatabase(selectedUser.getId(), newStatus)) {
+                if (updateUserStatusInDatabase(userId, newStatus)) {
+                    // Log successful status toggle
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "USER_MANAGEMENT_TOGGLE_STATUS_SUCCESS",
+                            "MEDIUM",
+                            currentUser,
+                            "Toggled user status - User ID: " + userId + 
+                            ", Username: " + username + 
+                            ", Old Status: " + currentStatus + 
+                            ", New Status: " + newStatus
+                        );
+                    }
+                    
                     loadUsersFromDatabase(); // Refresh the table
-                showInfo("Success", "User status changed to " + newStatus);
+                    showInfo("Success", "User status changed to " + newStatus);
+                } else {
+                    // Log failed status toggle
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "USER_MANAGEMENT_TOGGLE_STATUS_FAILED",
+                            "MEDIUM",
+                            currentUser,
+                            "Failed to toggle user status - User ID: " + userId
+                        );
+                    }
+                }
+            } else {
+                // Log toggle status cancelled
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_MANAGEMENT_TOGGLE_STATUS_CANCELLED",
+                        "LOW",
+                        currentUser,
+                        "Cancelled toggling user status - User ID: " + userId
+                    );
                 }
             }
         });
@@ -522,12 +1080,34 @@ public class UserManagementController implements Initializable {
 
     @FXML
     private void onRefresh() {
+        // Log refresh click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_MANAGEMENT_REFRESH",
+                "LOW",
+                currentUser,
+                "Refreshed user data from database"
+            );
+        }
+        
         loadDataFromDatabase();
         showInfo("Refreshed", "User data refreshed from database!");
     }
 
     @FXML
     private void onExportUsers() {
+        // Log export click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_MANAGEMENT_EXPORT_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Export Users button"
+            );
+        }
+        
         try {
             // Create CSV content
             StringBuilder csvContent = new StringBuilder();
@@ -555,12 +1135,45 @@ public class UserManagementController implements Initializable {
             if (file != null) {
                 try (java.io.FileWriter writer = new java.io.FileWriter(file)) {
                     writer.write(csvContent.toString());
+                    
+                    // Log successful export
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "USER_MANAGEMENT_EXPORT_SUCCESS",
+                            "MEDIUM",
+                            currentUser,
+                            "Exported users to file - Filename: " + file.getName() + 
+                            ", Records: " + users.size()
+                        );
+                    }
+                    
                     showInfo("Export Success", "Users exported successfully to: " + file.getName());
+                }
+            } else {
+                // Log export cancelled
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_MANAGEMENT_EXPORT_CANCELLED",
+                        "LOW",
+                        currentUser,
+                        "Cancelled exporting users"
+                    );
                 }
             }
             
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error exporting users", e);
+            
+            // Log export error
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_MANAGEMENT_EXPORT_FAILED",
+                    "MEDIUM",
+                    currentUser,
+                    "Failed to export users - Error: " + e.getMessage()
+                );
+            }
+            
             showError("Export Error", "Failed to export users: " + e.getMessage());
         }
     }

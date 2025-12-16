@@ -20,7 +20,8 @@
 <children>
 <Label text="Payroll Generator" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
 <Region HBox.hgrow="ALWAYS" />
-<Button text="Add Payroll Entry" onAction="#onAddPayroll" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" />
+<Button fx:id="generatePayrollButton" text="Generate LGU Payroll" onAction="#onGeneratePayroll" style="-fx-background-color: linear-gradient(to right, #1b5e20, #2e7d32); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" />
+<Button fx:id="addPayrollButton" text="Add Manual Entry" onAction="#onAddPayroll" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" />
 </children>
 <effect>
 <DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
@@ -38,8 +39,8 @@
 <DatePicker fx:id="periodFilter" promptText="Select Period" style="-fx-background-radius: 6;" />
 <Button text="Search" onAction="#onSearch" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
 <Button text="View Generated" onAction="#onViewGenerated" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
-<Button text="Edit Entry" onAction="#onEditPayroll" style="-fx-background-color: #f57c00; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
-<Button text="Delete Record" onAction="#onDeletePayroll" style="-fx-background-color: #d32f2f; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
+<Button fx:id="editPayrollButton" text="Edit Entry" onAction="#onEditPayroll" style="-fx-background-color: #f57c00; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
+<Button fx:id="deletePayrollButton" text="Delete Record" onAction="#onDeletePayroll" style="-fx-background-color: #d32f2f; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
 </children>
 <effect>
 <DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
@@ -52,18 +53,18 @@
 <Label text="Payroll Entries" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
 <TableView fx:id="payrollTable" prefHeight="400.0" style="-fx-background-color: transparent;" VBox.vgrow="ALWAYS">
 <columns>
-<TableColumn fx:id="colPayrollId" text="Payroll ID" prefWidth="120.0" />
+<TableColumn fx:id="colPayrollId" text="ID" prefWidth="80.0" />
 <TableColumn fx:id="colEmployeeId" text="Employee ID" prefWidth="100.0" />
-<TableColumn fx:id="colEmployeeName" text="Employee Name" prefWidth="250.0" />
-<TableColumn fx:id="colPosition" text="Position" prefWidth="150.0" />
-<TableColumn fx:id="colPayPeriod" text="Pay Period" prefWidth="120.0" />
-<TableColumn fx:id="colBasicSalary" text="Basic Salary" prefWidth="120.0" />
-<TableColumn fx:id="colOvertime" text="Overtime" prefWidth="100.0" />
+<TableColumn fx:id="colEmployeeName" text="Employee Name" prefWidth="200.0" />
+<TableColumn fx:id="colPosition" text="Position" prefWidth="120.0" />
+<TableColumn fx:id="colPayPeriod" text="Pay Period" prefWidth="140.0" />
+<TableColumn fx:id="colBasicSalary" text="Basic Salary" prefWidth="110.0" />
+<TableColumn fx:id="colOvertime" text="Overload Pay" prefWidth="100.0" />
 <TableColumn fx:id="colAllowances" text="Allowances" prefWidth="100.0" />
-<TableColumn fx:id="colDeductions" text="Deductions" prefWidth="100.0" />
-<TableColumn fx:id="colNetPay" text="Net Pay" prefWidth="120.0" />
+<TableColumn fx:id="colDeductions" text="Total Deductions" prefWidth="120.0" />
+<TableColumn fx:id="colNetPay" text="Net Pay" prefWidth="110.0" />
 <TableColumn fx:id="colStatus" text="Status" prefWidth="100.0" />
-<TableColumn fx:id="colCreatedDate" text="Created Date" prefWidth="120.0" />
+<TableColumn fx:id="colCreatedDate" text="Processed Date" prefWidth="140.0" />
 </columns>
 <effect>
 <DropShadow radius="4.0" color="#00000020" offsetY="2.0" />

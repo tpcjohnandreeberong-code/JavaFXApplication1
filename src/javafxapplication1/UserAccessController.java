@@ -75,6 +75,17 @@ public class UserAccessController implements Initializable {
         setupEventHandlers();
         assignDefaultPermissions(); // Assign default permissions to roles
         setupPermissionBasedVisibility(); // Show/hide buttons based on user permissions
+        
+        // Log module access
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_ACCESS_MODULE_ACCESS",
+                "LOW",
+                currentUser,
+                "Accessed User Access Control module"
+            );
+        }
     }
     
     private void initializeDatabase() {
@@ -379,6 +390,19 @@ public class UserAccessController implements Initializable {
     private void onSearchRoles() {
         String searchText = roleSearchField.getText() == null ? "" : roleSearchField.getText().trim().toLowerCase();
         
+        // Log search activity (only if there's actual text)
+        if (!searchText.isEmpty()) {
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_ACCESS_SEARCH_ROLES",
+                    "LOW",
+                    currentUser,
+                    "Searched roles with keyword: '" + searchText + "'"
+                );
+            }
+        }
+        
         if (searchText.isEmpty()) {
             roleTable.setItems(roles);
         } else {
@@ -387,57 +411,242 @@ public class UserAccessController implements Initializable {
                 role.getDescription().toLowerCase().contains(searchText)
             );
             roleTable.setItems(filteredRoles);
+            
+            // Log search results
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_ACCESS_SEARCH_ROLES_RESULTS",
+                    "LOW",
+                    currentUser,
+                    "Search completed - Keyword: '" + searchText + 
+                    "', Results: " + filteredRoles.size() + " roles found"
+                );
+            }
         }
     }
 
     @FXML
     private void onAddRole() {
+        // Log add click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_ACCESS_ADD_ROLE_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Add Role button"
+            );
+        }
+        
         Dialog<SystemRole> dialog = buildRoleDialog(null);
         Optional<SystemRole> result = dialog.showAndWait();
-        result.ifPresent(role -> {
+        
+        if (result.isPresent()) {
+            SystemRole role = result.get();
             if (addRoleToDatabase(role)) {
+                // Log successful add
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_ACCESS_ADD_ROLE_SUCCESS",
+                        "MEDIUM",
+                        currentUser,
+                        "Added new role - Role Name: " + role.getName() + 
+                        ", Description: " + role.getDescription() + 
+                        ", Status: " + role.getStatus()
+                    );
+                }
+                
                 loadRolesFromDatabase(); // Refresh the table
                 showInfo("Success", "Role added successfully: " + role.getName());
+            } else {
+                // Log failed add
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_ACCESS_ADD_ROLE_FAILED",
+                        "MEDIUM",
+                        currentUser,
+                        "Failed to add role - Role Name: " + role.getName()
+                    );
+                }
             }
-        });
+        } else {
+            // Log add cancelled
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_ACCESS_ADD_ROLE_CANCELLED",
+                    "LOW",
+                    currentUser,
+                    "Cancelled adding role"
+                );
+            }
+        }
     }
 
     @FXML
     private void onEditRole() {
         if (selectedRole == null) {
             showError("No Role Selected", "Please select a role to edit.");
+            
+            // Log failed edit attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_ACCESS_EDIT_ROLE_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Attempted to edit role but no role was selected"
+                );
+            }
             return;
+        }
+        
+        // Log edit click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        int roleId = selectedRole.getId();
+        String oldName = selectedRole.getName();
+        String oldDescription = selectedRole.getDescription();
+        String oldStatus = selectedRole.getStatus();
+        
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_ACCESS_EDIT_ROLE_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Edit Role button - Role ID: " + roleId + 
+                ", Role Name: " + oldName
+            );
         }
         
         Dialog<SystemRole> dialog = buildRoleDialog(selectedRole);
         Optional<SystemRole> result = dialog.showAndWait();
-        result.ifPresent(role -> {
+        
+        if (result.isPresent()) {
+            SystemRole role = result.get();
             if (updateRoleInDatabase(role)) {
+                // Log successful edit
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_ACCESS_EDIT_ROLE_SUCCESS",
+                        "MEDIUM",
+                        currentUser,
+                        "Updated role - Role ID: " + roleId + 
+                        ", Old Name: " + oldName + 
+                        ", New Name: " + role.getName() + 
+                        ", Old Description: " + oldDescription + 
+                        ", New Description: " + role.getDescription() + 
+                        ", Old Status: " + oldStatus + 
+                        ", New Status: " + role.getStatus()
+                    );
+                }
+                
                 loadRolesFromDatabase(); // Refresh the table
                 showInfo("Success", "Role updated successfully: " + role.getName());
+            } else {
+                // Log failed update
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_ACCESS_EDIT_ROLE_FAILED",
+                        "MEDIUM",
+                        currentUser,
+                        "Failed to update role - Role ID: " + roleId
+                    );
+                }
             }
-        });
+        } else {
+            // Log edit cancelled
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_ACCESS_EDIT_ROLE_CANCELLED",
+                    "LOW",
+                    currentUser,
+                    "Cancelled editing role - Role ID: " + roleId
+                );
+            }
+        }
     }
 
     @FXML
     private void onDeleteRole() {
         if (selectedRole == null) {
             showError("No Role Selected", "Please select a role to delete.");
+            
+            // Log failed delete attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_ACCESS_DELETE_ROLE_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Attempted to delete role but no role was selected"
+                );
+            }
             return;
+        }
+
+        // Log delete click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        int roleId = selectedRole.getId();
+        String roleName = selectedRole.getName();
+        String description = selectedRole.getDescription();
+        int userCount = selectedRole.getUserCount();
+        
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_ACCESS_DELETE_ROLE_CLICK",
+                "HIGH",
+                currentUser,
+                "Clicked Delete Role button - Role ID: " + roleId + 
+                ", Role Name: " + roleName + 
+                ", User Count: " + userCount
+            );
         }
 
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Delete Role");
         alert.setHeaderText("Are you sure you want to delete this role?");
-        alert.setContentText("Role: " + selectedRole.getName() + "\nThis action cannot be undone.");
+        alert.setContentText("Role: " + roleName + "\nThis action cannot be undone.");
 
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
-                if (deleteRoleFromDatabase(selectedRole.getId())) {
+                if (deleteRoleFromDatabase(roleId)) {
+                    // Log successful delete
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "USER_ACCESS_DELETE_ROLE_SUCCESS",
+                            "HIGH",
+                            currentUser,
+                            "Deleted role - Role ID: " + roleId + 
+                            ", Role Name: " + roleName + 
+                            ", Description: " + description + 
+                            ", User Count: " + userCount
+                        );
+                    }
+                    
                     loadRolesFromDatabase(); // Refresh the table
-                selectedRole = null;
-                selectedRoleLabel.setText("None");
-                    showInfo("Success", "Role deleted successfully: " + selectedRole.getName());
+                    selectedRole = null;
+                    selectedRoleLabel.setText("None");
+                    showInfo("Success", "Role deleted successfully: " + roleName);
+                } else {
+                    // Log failed delete
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "USER_ACCESS_DELETE_ROLE_FAILED",
+                            "HIGH",
+                            currentUser,
+                            "Failed to delete role - Role ID: " + roleId
+                        );
+                    }
+                }
+            } else {
+                // Log delete cancelled
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_ACCESS_DELETE_ROLE_CANCELLED",
+                        "MEDIUM",
+                        currentUser,
+                        "Cancelled deleting role - Role ID: " + roleId
+                    );
                 }
             }
         });
@@ -445,12 +654,34 @@ public class UserAccessController implements Initializable {
 
     @FXML
     private void onRefresh() {
+        // Log refresh click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_ACCESS_REFRESH",
+                "LOW",
+                currentUser,
+                "Refreshed user access data from database"
+            );
+        }
+        
         loadDataFromDatabase();
         showInfo("Refreshed", "Data refreshed from database!");
     }
 
     @FXML
     private void onExportRoles() {
+        // Log export click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_ACCESS_EXPORT_ROLES_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Export Roles button"
+            );
+        }
+        
         try {
             // Create CSV content
             StringBuilder csvContent = new StringBuilder();
@@ -476,12 +707,45 @@ public class UserAccessController implements Initializable {
             if (file != null) {
                 try (java.io.FileWriter writer = new java.io.FileWriter(file)) {
                     writer.write(csvContent.toString());
+                    
+                    // Log successful export
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "USER_ACCESS_EXPORT_ROLES_SUCCESS",
+                            "MEDIUM",
+                            currentUser,
+                            "Exported roles to file - Filename: " + file.getName() + 
+                            ", Records: " + roles.size()
+                        );
+                    }
+                    
                     showInfo("Export Success", "Roles exported successfully to: " + file.getName());
+                }
+            } else {
+                // Log export cancelled
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_ACCESS_EXPORT_ROLES_CANCELLED",
+                        "LOW",
+                        currentUser,
+                        "Cancelled exporting roles"
+                    );
                 }
             }
             
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error exporting roles", e);
+            
+            // Log export error
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_ACCESS_EXPORT_ROLES_FAILED",
+                    "MEDIUM",
+                    currentUser,
+                    "Failed to export roles - Error: " + e.getMessage()
+                );
+            }
+            
             showError("Export Error", "Failed to export roles: " + e.getMessage());
         }
     }
@@ -524,18 +788,75 @@ public class UserAccessController implements Initializable {
     // Action Methods - Permission Management
     @FXML
     private void onAddPermission() {
+        // Log add permission click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_ACCESS_ADD_PERMISSION_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Add Permission button"
+            );
+        }
+        
         Dialog<SystemPermission> dialog = buildPermissionDialog(null);
         Optional<SystemPermission> result = dialog.showAndWait();
-        result.ifPresent(permission -> {
+        
+        if (result.isPresent()) {
+            SystemPermission permission = result.get();
             if (addPermissionToDatabase(permission)) {
+                // Log successful add
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_ACCESS_ADD_PERMISSION_SUCCESS",
+                        "MEDIUM",
+                        currentUser,
+                        "Added new permission - Permission Name: " + permission.getPermissionName() + 
+                        ", Module: " + permission.getModuleName() + 
+                        ", Action: " + permission.getActionName() + 
+                        ", Description: " + (permission.getDescription() != null ? permission.getDescription() : "N/A")
+                    );
+                }
+                
                 loadPermissionsFromDatabase(); // Refresh permissions
                 showInfo("Success", "Permission added successfully: " + permission.getPermissionName());
+            } else {
+                // Log failed add
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_ACCESS_ADD_PERMISSION_FAILED",
+                        "MEDIUM",
+                        currentUser,
+                        "Failed to add permission - Permission Name: " + permission.getPermissionName()
+                    );
+                }
             }
-        });
+        } else {
+            // Log add cancelled
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_ACCESS_ADD_PERMISSION_CANCELLED",
+                    "LOW",
+                    currentUser,
+                    "Cancelled adding permission"
+                );
+            }
+        }
     }
 
     @FXML
     private void onUpdatePermission() {
+        // Log update permission click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_ACCESS_UPDATE_PERMISSION_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Update Permission button"
+            );
+        }
+        
         // For now, show a dialog to select permission to update
         // In a real implementation, you'd get the selected permission from the tree
         Dialog<SystemPermission> selectDialog = new Dialog<>();
@@ -569,20 +890,79 @@ public class UserAccessController implements Initializable {
         });
         
         Optional<SystemPermission> selectedPermission = selectDialog.showAndWait();
-        selectedPermission.ifPresent(permission -> {
+        
+        if (selectedPermission.isPresent()) {
+            SystemPermission permission = selectedPermission.get();
             Dialog<SystemPermission> editDialog = buildPermissionDialog(permission);
             Optional<SystemPermission> result = editDialog.showAndWait();
-            result.ifPresent(updatedPermission -> {
+            
+            if (result.isPresent()) {
+                SystemPermission updatedPermission = result.get();
                 if (updatePermissionInDatabase(permission.getPermissionId(), updatedPermission)) {
+                    // Log successful update
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "USER_ACCESS_UPDATE_PERMISSION_SUCCESS",
+                            "MEDIUM",
+                            currentUser,
+                            "Updated permission - Permission ID: " + permission.getPermissionId() + 
+                            ", Old Name: " + permission.getPermissionName() + 
+                            ", New Name: " + updatedPermission.getPermissionName() + 
+                            ", Module: " + updatedPermission.getModuleName() + 
+                            ", Action: " + updatedPermission.getActionName()
+                        );
+                    }
+                    
                     loadPermissionsFromDatabase(); // Refresh permissions
                     showInfo("Success", "Permission updated successfully: " + updatedPermission.getPermissionName());
+                } else {
+                    // Log failed update
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "USER_ACCESS_UPDATE_PERMISSION_FAILED",
+                            "MEDIUM",
+                            currentUser,
+                            "Failed to update permission - Permission ID: " + permission.getPermissionId()
+                        );
+                    }
                 }
-            });
-        });
+            } else {
+                // Log update cancelled
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "USER_ACCESS_UPDATE_PERMISSION_CANCELLED",
+                        "LOW",
+                        currentUser,
+                        "Cancelled updating permission - Permission ID: " + permission.getPermissionId()
+                    );
+                }
+            }
+        } else {
+            // Log selection cancelled
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_ACCESS_UPDATE_PERMISSION_CANCELLED",
+                    "LOW",
+                    currentUser,
+                    "Cancelled selecting permission to update"
+                );
+            }
+        }
     }
 
     @FXML
     private void onDeletePermission() {
+        // Log delete permission click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_ACCESS_DELETE_PERMISSION_CLICK",
+                "HIGH",
+                currentUser,
+                "Clicked Delete Permission button"
+            );
+        }
+        
         // Show a dialog to select permission to delete
         Dialog<SystemPermission> selectDialog = new Dialog<>();
         selectDialog.setTitle("Delete Permission");
@@ -615,7 +995,9 @@ public class UserAccessController implements Initializable {
         });
         
         Optional<SystemPermission> selectedPermission = selectDialog.showAndWait();
-        selectedPermission.ifPresent(permission -> {
+        
+        if (selectedPermission.isPresent()) {
+            SystemPermission permission = selectedPermission.get();
             Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
             confirm.setTitle("Delete Permission");
             confirm.setHeaderText("Are you sure you want to delete this permission?");
@@ -624,12 +1006,55 @@ public class UserAccessController implements Initializable {
             confirm.showAndWait().ifPresent(response -> {
                 if (response == ButtonType.OK) {
                     if (deletePermissionFromDatabase(permission.getPermissionId())) {
+                        // Log successful delete
+                        if (currentUser != null) {
+                            SecurityLogger.logSecurityEvent(
+                                "USER_ACCESS_DELETE_PERMISSION_SUCCESS",
+                                "HIGH",
+                                currentUser,
+                                "Deleted permission - Permission ID: " + permission.getPermissionId() + 
+                                ", Permission Name: " + permission.getPermissionName() + 
+                                ", Module: " + permission.getModuleName() + 
+                                ", Action: " + permission.getActionName()
+                            );
+                        }
+                        
                         loadPermissionsFromDatabase(); // Refresh permissions
                         showInfo("Success", "Permission deleted successfully: " + permission.getPermissionName());
+                    } else {
+                        // Log failed delete
+                        if (currentUser != null) {
+                            SecurityLogger.logSecurityEvent(
+                                "USER_ACCESS_DELETE_PERMISSION_FAILED",
+                                "HIGH",
+                                currentUser,
+                                "Failed to delete permission - Permission ID: " + permission.getPermissionId()
+                            );
+                        }
+                    }
+                } else {
+                    // Log delete cancelled
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "USER_ACCESS_DELETE_PERMISSION_CANCELLED",
+                            "MEDIUM",
+                            currentUser,
+                            "Cancelled deleting permission - Permission ID: " + permission.getPermissionId()
+                        );
                     }
                 }
             });
-        });
+        } else {
+            // Log selection cancelled
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_ACCESS_DELETE_PERMISSION_CANCELLED",
+                    "LOW",
+                    currentUser,
+                    "Cancelled selecting permission to delete"
+                );
+            }
+        }
     }
 
     @FXML
@@ -639,6 +1064,17 @@ public class UserAccessController implements Initializable {
         if (selectedRole == null) {
             logger.warning("Save permissions failed: No role selected");
             showError("No Role Selected", "Please select a role to save permissions for.");
+            
+            // Log failed save attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_ACCESS_SAVE_PERMISSIONS_FAILED",
+                    "MEDIUM",
+                    currentUser,
+                    "Attempted to save permissions but no role was selected"
+                );
+            }
             return;
         }
         
@@ -649,14 +1085,57 @@ public class UserAccessController implements Initializable {
         String currentUser = sessionManager.isLoggedIn() ? sessionManager.getCurrentUser() : "Unknown";
         logger.info("Save initiated by user: " + currentUser);
         
+        // Log save permissions click
+        if (currentUser != null && !currentUser.equals("Unknown")) {
+            SecurityLogger.logSecurityEvent(
+                "USER_ACCESS_SAVE_PERMISSIONS_CLICK",
+                "HIGH",
+                currentUser,
+                "Clicked Save Permissions button - Role ID: " + selectedRole.getId() + 
+                ", Role Name: " + selectedRole.getName()
+            );
+        }
+        
         // Log current permission tree state
         logCurrentPermissionTreeState();
         
+        // Count selected permissions
+        int selectedPermissionsCount = 0;
+        for (Boolean isSelected : permissionStates.values()) {
+            if (isSelected != null && isSelected) {
+                selectedPermissionsCount++;
+            }
+        }
+        
         if (saveRolePermissionsToDatabase(selectedRole.getId())) {
             logger.info("Permissions saved successfully for role: " + selectedRole.getName());
-        showInfo("Success", "Permissions saved successfully for role: " + selectedRole.getName());
+            
+            // Log successful save
+            if (currentUser != null && !currentUser.equals("Unknown")) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_ACCESS_SAVE_PERMISSIONS_SUCCESS",
+                    "HIGH",
+                    currentUser,
+                    "Saved permissions for role - Role ID: " + selectedRole.getId() + 
+                    ", Role Name: " + selectedRole.getName() + 
+                    ", Permissions Count: " + selectedPermissionsCount
+                );
+            }
+            
+            showInfo("Success", "Permissions saved successfully for role: " + selectedRole.getName());
         } else {
             logger.severe("Failed to save permissions for role: " + selectedRole.getName());
+            
+            // Log failed save
+            if (currentUser != null && !currentUser.equals("Unknown")) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_ACCESS_SAVE_PERMISSIONS_FAILED",
+                    "HIGH",
+                    currentUser,
+                    "Failed to save permissions - Role ID: " + selectedRole.getId() + 
+                    ", Role Name: " + selectedRole.getName()
+                );
+            }
         }
         
         logger.info("=== SAVE PERMISSIONS COMPLETED ===");
@@ -703,9 +1182,47 @@ public class UserAccessController implements Initializable {
     private void onResetPermissions() {
         if (selectedRole == null) {
             showError("No Role Selected", "Please select a role to reset permissions for.");
+            
+            // Log failed reset attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "USER_ACCESS_RESET_PERMISSIONS_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Attempted to reset permissions but no role was selected"
+                );
+            }
             return;
         }
-        showInfo("Reset", "Permissions reset to default for role: " + selectedRole.getName());
+        
+        // Log reset permissions click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        int roleId = selectedRole.getId();
+        String roleName = selectedRole.getName();
+        
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_ACCESS_RESET_PERMISSIONS_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Reset Permissions button - Role ID: " + roleId + 
+                ", Role Name: " + roleName
+            );
+        }
+        
+        // Log successful reset
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "USER_ACCESS_RESET_PERMISSIONS_SUCCESS",
+                "MEDIUM",
+                currentUser,
+                "Reset permissions to default for role - Role ID: " + roleId + 
+                ", Role Name: " + roleName
+            );
+        }
+        
+        showInfo("Reset", "Permissions reset to default for role: " + roleName);
     }
 
     // Database Operations

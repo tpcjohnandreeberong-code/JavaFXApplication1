@@ -19,7 +19,7 @@
 <children>
 <Label text="Government Contributions Management" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
 <Region HBox.hgrow="ALWAYS" />
-<Button text="Add Contribution Rule" onAction="#onAdd" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" />
+<Button fx:id="addContributionButton" text="Add Contribution Rule" onAction="#onAdd" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" />
 </children>
 <effect>
 <DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
@@ -29,13 +29,10 @@
 <!-- Search and Filter Section -->
 <HBox alignment="CENTER_LEFT" spacing="10.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;">
 <children>
-<Label text="Type:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-<ComboBox fx:id="contributionTypeFilter" prefWidth="150.0" style="-fx-background-radius: 6;" />
-<TextField fx:id="searchField" promptText="Search by code or name" prefWidth="200.0" style="-fx-background-radius: 6;" />
-<Button text="Search" onAction="#onSearch" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
-<Button text="Edit" onAction="#onEdit" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
-<Button text="Toggle Active" onAction="#onToggleActive" style="-fx-background-color: #ff9800; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
-<Button text="Calculate Preview" onAction="#onCalculatePreview" style="-fx-background-color: #9c27b0; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
+<TextField fx:id="searchField" promptText="Search by name" prefWidth="200.0" style="-fx-background-radius: 6;" />
+<Button fx:id="searchButton" text="Search" onAction="#onSearch" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
+<Button fx:id="editButton" text="Edit" onAction="#onEdit" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
+<Button fx:id="deleteButton" text="Delete" onAction="#onDelete" style="-fx-background-color: #d32f2f; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
 </children>
 <effect>
 <DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
@@ -46,16 +43,10 @@
 <TableView fx:id="table" prefHeight="400.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;" VBox.vgrow="ALWAYS">
 <columns>
 <TableColumn fx:id="colId" text="ID" minWidth="60.0" />
-<TableColumn fx:id="colCode" text="Code" minWidth="100.0" />
-<TableColumn fx:id="colName" text="Name" minWidth="180.0" />
-<TableColumn fx:id="colBasis" text="Basis" minWidth="80.0" />
-<TableColumn fx:id="colRatePercent" text="Rate %" minWidth="80.0" />
-<TableColumn fx:id="colFixedAmount" text="Fixed Amount" minWidth="100.0" />
-<TableColumn fx:id="colMinSalary" text="Min Salary" minWidth="100.0" />
-<TableColumn fx:id="colMaxSalary" text="Max Salary" minWidth="100.0" />
-<TableColumn fx:id="colEmployeeShare" text="Employee %" minWidth="90.0" />
-<TableColumn fx:id="colEmployerShare" text="Employer %" minWidth="90.0" />
-<TableColumn fx:id="colActive" text="Active" minWidth="70.0" />
+<TableColumn fx:id="colName" text="Name" minWidth="200.0" />
+<TableColumn fx:id="colFixedAmount" text="Fixed Amount" minWidth="120.0" />
+<TableColumn fx:id="colPercentage" text="Percentage" minWidth="120.0" />
+<TableColumn fx:id="colFormula" text="Formula" minWidth="200.0" />
 </columns>
 <effect>
 <DropShadow radius="4.0" color="#00000020" offsetY="2.0" />

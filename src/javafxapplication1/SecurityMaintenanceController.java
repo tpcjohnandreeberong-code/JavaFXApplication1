@@ -63,6 +63,12 @@ public class SecurityMaintenanceController implements Initializable {
 
     // Tab Pane
     @FXML private TabPane securityTabPane;
+    
+    // Action buttons
+    @FXML private Button refreshButton;
+    @FXML private Button exportLogButton;
+    @FXML private Button searchButton;
+    @FXML private Button clearLogButton;
 
     // Data Collections
     private final ObservableList<SecurityEvent> securityEvents = FXCollections.observableArrayList();
@@ -83,6 +89,128 @@ public class SecurityMaintenanceController implements Initializable {
         // Load data
         // loadPasswordPolicySettings(); // COMMENTED OUT - Password Policy
         loadSecurityEvents();
+        
+        // Setup permission-based button visibility
+        setupPermissionBasedVisibility();
+        
+        // Log module access
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "SECURITY_MAINTENANCE_MODULE_ACCESS",
+                "LOW",
+                currentUser,
+                "Accessed Security Maintenance module"
+            );
+        }
+    }
+    
+    private void setupPermissionBasedVisibility() {
+        try {
+            // Get current user from SessionManager
+            SessionManager sessionManager = SessionManager.getInstance();
+            
+            if (sessionManager.isLoggedIn()) {
+                String currentUser = sessionManager.getCurrentUser();
+                logger.info("Setting up permission-based visibility for user: " + currentUser);
+                
+                // Check user permissions
+                boolean canView = hasUserPermission(currentUser, "security.view");
+                boolean canEdit = hasUserPermission(currentUser, "security.edit");
+                
+                // Show/hide buttons based on permissions
+                // View permissions: Refresh, Export Log, Search
+                if (refreshButton != null) {
+                    refreshButton.setVisible(canView);
+                    refreshButton.setManaged(canView);
+                }
+                if (exportLogButton != null) {
+                    exportLogButton.setVisible(canView);
+                    exportLogButton.setManaged(canView);
+                }
+                if (searchButton != null) {
+                    searchButton.setVisible(canView);
+                    searchButton.setManaged(canView);
+                }
+                
+                // Edit permissions: Clear Log (modifies data)
+                if (clearLogButton != null) {
+                    clearLogButton.setVisible(canEdit);
+                    clearLogButton.setManaged(canEdit);
+                }
+                
+                logger.info("Security Maintenance buttons visibility - View: " + canView + ", Edit: " + canEdit);
+                
+            } else {
+                logger.warning("No user session found, hiding all action buttons");
+                hideAllActionButtons();
+            }
+            
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error setting up permission-based visibility", e);
+            hideAllActionButtons();
+        }
+    }
+    
+    private void hideAllActionButtons() {
+        if (refreshButton != null) {
+            refreshButton.setVisible(false);
+            refreshButton.setManaged(false);
+        }
+        if (exportLogButton != null) {
+            exportLogButton.setVisible(false);
+            exportLogButton.setManaged(false);
+        }
+        if (searchButton != null) {
+            searchButton.setVisible(false);
+            searchButton.setManaged(false);
+        }
+        if (clearLogButton != null) {
+            clearLogButton.setVisible(false);
+            clearLogButton.setManaged(false);
+        }
+    }
+    
+    private boolean hasUserPermission(String username, String permissionName) {
+        try {
+            if (connection == null || connection.isClosed()) {
+                logger.warning("Database connection not available, defaulting to admin permissions for user: " + username);
+                return username != null && username.equals("admin");
+            }
+            
+            // Get user's role from database
+            String getRoleQuery = "SELECT role FROM users WHERE username = ?";
+            PreparedStatement getRoleStmt = connection.prepareStatement(getRoleQuery);
+            getRoleStmt.setString(1, username);
+            ResultSet roleRs = getRoleStmt.executeQuery();
+            
+            if (roleRs.next()) {
+                String userRole = roleRs.getString("role");
+                
+                // Check if role has the permission
+                String checkPermissionQuery = "SELECT COUNT(*) FROM role_permissions rp " +
+                                           "JOIN roles r ON rp.role_id = r.role_id " +
+                                           "JOIN permissions p ON rp.permission_id = p.permission_id " +
+                                           "WHERE r.role_name = ? AND p.permission_name = ? AND rp.granted = TRUE";
+                PreparedStatement checkPermissionStmt = connection.prepareStatement(checkPermissionQuery);
+                checkPermissionStmt.setString(1, userRole);
+                checkPermissionStmt.setString(2, permissionName);
+                ResultSet permissionRs = checkPermissionStmt.executeQuery();
+                
+                if (permissionRs.next()) {
+                    boolean hasPermission = permissionRs.getInt(1) > 0;
+                    logger.info("User " + username + " (Role: " + userRole + ") has permission " + permissionName + ": " + hasPermission);
+                    return hasPermission;
+                }
+            }
+            
+            return false;
+            
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error checking user permission", e);
+            // If database error occurs, default to admin permissions for admin user
+            return username != null && username.equals("admin");
+        }
     }
     
     private void initializeDatabase() {
@@ -198,6 +326,35 @@ public class SecurityMaintenanceController implements Initializable {
         // Severity Levels
         severityFilter.getItems().addAll("All Severity", "LOW", "MEDIUM", "HIGH", "CRITICAL");
         severityFilter.setValue("All Severity");
+        
+        // Add listeners for filter changes
+        eventTypeFilter.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && !newVal.equals(oldVal)) {
+                String currentUser = SessionManager.getInstance().getCurrentUser();
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "SECURITY_MAINTENANCE_FILTER_EVENT_TYPE",
+                        "LOW",
+                        currentUser,
+                        "Changed event type filter to: " + newVal
+                    );
+                }
+            }
+        });
+        
+        severityFilter.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && !newVal.equals(oldVal)) {
+                String currentUser = SessionManager.getInstance().getCurrentUser();
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "SECURITY_MAINTENANCE_FILTER_SEVERITY",
+                        "LOW",
+                        currentUser,
+                        "Changed severity filter to: " + newVal
+                    );
+                }
+            }
+        });
     }
 
     /*
@@ -308,10 +465,25 @@ public class SecurityMaintenanceController implements Initializable {
     // Security Monitoring Actions
     @FXML
     private void onSearchSecurityEvents() {
+        String searchText = searchField.getText() != null ? searchField.getText().trim() : "";
+        String eventType = eventTypeFilter.getValue();
+        String severity = severityFilter.getValue();
+        
+        // Log search activity
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "SECURITY_MAINTENANCE_SEARCH",
+                "LOW",
+                currentUser,
+                "Searched security events - Keyword: '" + (searchText.isEmpty() ? "(none)" : searchText) + 
+                "', Event Type: " + (eventType != null ? eventType : "All") + 
+                ", Severity: " + (severity != null ? severity : "All") + 
+                "'"
+            );
+        }
+        
         try {
-            String searchText = searchField.getText() != null ? searchField.getText().trim() : "";
-            String eventType = eventTypeFilter.getValue();
-            String severity = severityFilter.getValue();
             
             StringBuilder query = new StringBuilder("""
                 SELECT event_id, timestamp, event_type, severity, username, 
@@ -372,6 +544,17 @@ public class SecurityMaintenanceController implements Initializable {
 
     @FXML
     private void onClearSecurityLog() {
+        // Log clear log click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "SECURITY_LOG_CLEAR_CLICK",
+                "HIGH",
+                currentUser,
+                "Clicked Clear Security Log button"
+            );
+        }
+        
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
         confirm.setTitle("Clear Security Log");
         confirm.setHeaderText(null);
@@ -386,29 +569,80 @@ public class SecurityMaintenanceController implements Initializable {
                 
                 securityEvents.clear();
                 
-                // Log this action
-                logSecurityEvent("SECURITY_LOG_CLEARED", "HIGH", 
-                    SessionManager.getInstance().getCurrentUser(),
-                    "Security log cleared - " + deletedRows + " events deleted", getClientIP());
+                // Log this action (using SecurityLogger for consistency)
+                String currentUser1 = SessionManager.getInstance().getCurrentUser();
+                if (currentUser1 != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "SECURITY_LOG_CLEARED",
+                        "HIGH",
+                        currentUser1,
+                        "Security log cleared - " + deletedRows + " events deleted"
+                    );
+                }
                 
                 showAlert(Alert.AlertType.INFORMATION, "Success", 
                     "Security log cleared successfully! " + deletedRows + " events deleted.");
                 
             } catch (SQLException e) {
                 logger.log(Level.SEVERE, "Error clearing security log", e);
+                
+                // Log failed clear attempt
+                String currentUser2 = SessionManager.getInstance().getCurrentUser();
+                if (currentUser2 != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "SECURITY_LOG_CLEAR_FAILED",
+                        "HIGH",
+                        currentUser2,
+                        "Failed to clear security log - Error: " + e.getMessage()
+                    );
+                }
+                
                 showAlert(Alert.AlertType.ERROR, "Error", "Failed to clear security log: " + e.getMessage());
+            }
+        } else {
+            // Log clear cancellation
+            String currentUser3 = SessionManager.getInstance().getCurrentUser();
+            if (currentUser3 != null) {
+                SecurityLogger.logSecurityEvent(
+                    "SECURITY_LOG_CLEAR_CANCELLED",
+                    "MEDIUM",
+                    currentUser3,
+                    "Cancelled clearing security log"
+                );
             }
         }
     }
 
     @FXML
     private void onRefresh() {
+        // Log refresh click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "SECURITY_MAINTENANCE_REFRESH",
+                "LOW",
+                currentUser,
+                "Refreshed security events list"
+            );
+        }
+        
         loadSecurityEvents();
         showAlert(Alert.AlertType.INFORMATION, "Success", "Security events refreshed successfully!");
     }
 
     @FXML
     private void onExportSecurityLog() {
+        // Log export click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "SECURITY_LOG_EXPORT_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Export Security Log button"
+            );
+        }
+        
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Export Security Log");
         fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV Files", "*.csv"));
@@ -440,9 +674,18 @@ public class SecurityMaintenanceController implements Initializable {
 
             exportTask.setOnSucceeded(e -> {
                 Platform.runLater(() -> {
-                    logSecurityEvent("EXPORT_SECURITY_LOG", "LOW", 
-                        SessionManager.getInstance().getCurrentUser(),
-                        "Security log exported to: " + file.getName(), getClientIP());
+                    // Log successful export (using SecurityLogger for consistency)
+                    String currentUser4 = SessionManager.getInstance().getCurrentUser();
+                    if (currentUser4 != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "SECURITY_LOG_EXPORT_SUCCESS",
+                            "MEDIUM",
+                            currentUser4,
+                            "Security log exported successfully to: " + file.getName() + 
+                            " (" + securityEvents.size() + " events)"
+                        );
+                    }
+                    
                     showAlert(Alert.AlertType.INFORMATION, "Success", 
                         "Security log exported successfully to: " + file.getName());
                 });
@@ -450,6 +693,18 @@ public class SecurityMaintenanceController implements Initializable {
 
             exportTask.setOnFailed(e -> {
                 Platform.runLater(() -> {
+                    // Log failed export
+                    String currentUser5 = SessionManager.getInstance().getCurrentUser();
+                    if (currentUser5 != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "SECURITY_LOG_EXPORT_FAILED",
+                            "MEDIUM",
+                            currentUser5,
+                            "Failed to export security log - Error: " + 
+                            (exportTask.getException() != null ? exportTask.getException().getMessage() : "Unknown error")
+                        );
+                    }
+                    
                     showAlert(Alert.AlertType.ERROR, "Error", "Failed to export security log!");
                 });
             });

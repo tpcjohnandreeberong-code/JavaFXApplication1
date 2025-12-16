@@ -19,7 +19,7 @@
 <children>
 <Label text="Employee Management" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
 <Region HBox.hgrow="ALWAYS" />
-<Button text="Add Employee" onAction="#onAdd" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" />
+<Button fx:id="addEmployeeButton" text="Add Employee" onAction="#onAdd" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" />
 </children>
 <effect>
 <DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
@@ -32,8 +32,8 @@
 <Label text="Search:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
 <TextField fx:id="searchField" promptText="Search employee name or ID" prefWidth="250.0" style="-fx-background-radius: 6;" />
 <Button text="Search" onAction="#onSearch" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
-<Button text="Edit" onAction="#onEdit" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
-<Button text="Delete" onAction="#onDelete" style="-fx-background-color: #d32f2f; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
+<Button fx:id="editEmployeeButton" text="Edit" onAction="#onEdit" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
+<Button fx:id="deleteEmployeeButton" text="Delete" onAction="#onDelete" style="-fx-background-color: #d32f2f; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
 </children>
 <effect>
 <DropShadow radius="4.0" color="#00000020" offsetY="2.0" />

@@ -31,6 +31,7 @@ public class EmployeeController implements Initializable {
         private final String name;
         private final String position;
         private final double salary;
+        private final Integer salaryRefId; // Add salary_ref_id
 
         public Employee(int id, String accountNumber, String name, String position, double salary) {
             this.id = id;
@@ -38,12 +39,51 @@ public class EmployeeController implements Initializable {
             this.name = name;
             this.position = position;
             this.salary = salary;
+            this.salaryRefId = null;
         }
+        
+        public Employee(int id, String accountNumber, String name, String position, double salary, Integer salaryRefId) {
+            this.id = id;
+            this.accountNumber = accountNumber;
+            this.name = name;
+            this.position = position;
+            this.salary = salary;
+            this.salaryRefId = salaryRefId;
+        }
+        
         public int getId() { return id; }
         public String getAccountNumber() { return accountNumber; }
         public String getName() { return name; }
         public String getPosition() { return position; }
         public double getSalary() { return salary; }
+        public Integer getSalaryRefId() { return salaryRefId; }
+    }
+    
+    // Inner class for Salary Reference items in ComboBox
+    public static class SalaryReferenceItem {
+        private final int id;
+        private final double monthlySalary;
+        
+        public SalaryReferenceItem(int id, double monthlySalary) {
+            this.id = id;
+            this.monthlySalary = monthlySalary;
+        }
+        
+        public int getId() { return id; }
+        public double getMonthlySalary() { return monthlySalary; }
+        
+        @Override
+        public String toString() {
+            return String.format("₱%,.2f", monthlySalary);
+        }
+        
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (obj == null || getClass() != obj.getClass()) return false;
+            SalaryReferenceItem that = (SalaryReferenceItem) obj;
+            return id == that.id;
+        }
     }
 
     @FXML private TextField searchField;
@@ -53,6 +93,9 @@ public class EmployeeController implements Initializable {
     @FXML private TableColumn<Employee, String> colName;
     @FXML private TableColumn<Employee, String> colPosition;
     @FXML private TableColumn<Employee, Double> colSalary;
+    @FXML private Button addEmployeeButton;
+    @FXML private Button editEmployeeButton;
+    @FXML private Button deleteEmployeeButton;
 
     private final ObservableList<Employee> data = FXCollections.observableArrayList();
 
@@ -61,6 +104,118 @@ public class EmployeeController implements Initializable {
         initializeDatabase();
         setupTableColumns();
         loadEmployeesFromDatabase();
+        
+        // Setup permission-based button visibility
+        setupPermissionBasedVisibility();
+        
+        // Log module access
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "EMPLOYEE_MODULE_ACCESS",
+                "LOW",
+                currentUser,
+                "Accessed Employee Management module"
+            );
+        }
+    }
+    
+    private void setupPermissionBasedVisibility() {
+        try {
+            // Get current user from SessionManager
+            SessionManager sessionManager = SessionManager.getInstance();
+            
+            if (sessionManager.isLoggedIn()) {
+                String currentUser = sessionManager.getCurrentUser();
+                logger.info("Setting up permission-based visibility for user: " + currentUser);
+                
+                // Check user permissions
+                boolean canAdd = hasUserPermission(currentUser, "employee.add");
+                boolean canEdit = hasUserPermission(currentUser, "employee.edit");
+                boolean canDelete = hasUserPermission(currentUser, "employee.delete");
+                
+                // Show/hide buttons based on permissions
+                if (addEmployeeButton != null) {
+                    addEmployeeButton.setVisible(canAdd);
+                    addEmployeeButton.setManaged(canAdd);
+                }
+                if (editEmployeeButton != null) {
+                    editEmployeeButton.setVisible(canEdit);
+                    editEmployeeButton.setManaged(canEdit);
+                }
+                if (deleteEmployeeButton != null) {
+                    deleteEmployeeButton.setVisible(canDelete);
+                    deleteEmployeeButton.setManaged(canDelete);
+                }
+                
+                logger.info("Employee buttons visibility - Add: " + canAdd + ", Edit: " + canEdit + ", Delete: " + canDelete);
+                
+            } else {
+                logger.warning("No user session found, hiding all action buttons");
+                hideAllActionButtons();
+            }
+            
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error setting up permission-based visibility", e);
+            hideAllActionButtons();
+        }
+    }
+    
+    private void hideAllActionButtons() {
+        if (addEmployeeButton != null) {
+            addEmployeeButton.setVisible(false);
+            addEmployeeButton.setManaged(false);
+        }
+        if (editEmployeeButton != null) {
+            editEmployeeButton.setVisible(false);
+            editEmployeeButton.setManaged(false);
+        }
+        if (deleteEmployeeButton != null) {
+            deleteEmployeeButton.setVisible(false);
+            deleteEmployeeButton.setManaged(false);
+        }
+    }
+    
+    private boolean hasUserPermission(String username, String permissionName) {
+        try {
+            if (connection == null || connection.isClosed()) {
+                logger.warning("Database connection not available, defaulting to admin permissions for user: " + username);
+                return username != null && username.equals("admin");
+            }
+            
+            // Get user's role from database
+            String getRoleQuery = "SELECT role FROM users WHERE username = ?";
+            PreparedStatement getRoleStmt = connection.prepareStatement(getRoleQuery);
+            getRoleStmt.setString(1, username);
+            ResultSet roleRs = getRoleStmt.executeQuery();
+            
+            if (roleRs.next()) {
+                String userRole = roleRs.getString("role");
+                
+                // Check if role has the permission
+                String checkPermissionQuery = "SELECT COUNT(*) FROM role_permissions rp " +
+                                           "JOIN roles r ON rp.role_id = r.role_id " +
+                                           "JOIN permissions p ON rp.permission_id = p.permission_id " +
+                                           "WHERE r.role_name = ? AND p.permission_name = ? AND rp.granted = TRUE";
+                PreparedStatement checkPermissionStmt = connection.prepareStatement(checkPermissionQuery);
+                checkPermissionStmt.setString(1, userRole);
+                checkPermissionStmt.setString(2, permissionName);
+                ResultSet permissionRs = checkPermissionStmt.executeQuery();
+                
+                if (permissionRs.next()) {
+                    boolean hasPermission = permissionRs.getInt(1) > 0;
+                    logger.info("User " + username + " (Role: " + userRole + ") has permission " + permissionName + ": " + hasPermission);
+                    return hasPermission;
+                }
+            }
+            
+            return false;
+            
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error checking user permission", e);
+            // If database error occurs, default to admin permissions for admin user
+            return username != null && username.equals("admin");
+        }
     }
     
     private void initializeDatabase() {
@@ -133,7 +288,7 @@ public class EmployeeController implements Initializable {
             "    e.account_number,\n" +
             "    e.full_name,\n" +
             "    e.position,\n" +
-            "\n" +
+            "    e.salary_ref_id,\n" +
             "    sr.monthly_salary AS salary,\n" +
             "    sr.rate_per_day,\n" +
             "    sr.half_day_rate,\n" +
@@ -148,12 +303,22 @@ public class EmployeeController implements Initializable {
             
             data.clear();
             while (rs.next()) {
+                Integer salaryRefId = rs.getInt("salary_ref_id");
+                if (rs.wasNull()) {
+                    salaryRefId = null;
+                }
+                double salary = rs.getDouble("salary");
+                if (rs.wasNull()) {
+                    salary = 0.0;
+                }
+                
                 Employee employee = new Employee(
                     rs.getInt("id"),
                     rs.getString("account_number"),
                     rs.getString("full_name"),
                     rs.getString("position"),
-                    rs.getDouble("salary")
+                    salary,
+                    salaryRefId
                 );
                 data.add(employee);
             }
@@ -170,6 +335,17 @@ public class EmployeeController implements Initializable {
     @FXML
     private void onSearch() {
         String searchText = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase();
+        
+        // Log search activity
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "EMPLOYEE_SEARCH",
+                "LOW",
+                currentUser,
+                "Searched for employees with keyword: '" + (searchText.isEmpty() ? "(all)" : searchText) + "'"
+            );
+        }
         
         if (searchText.isEmpty()) {
             table.setItems(data);
@@ -193,12 +369,42 @@ public class EmployeeController implements Initializable {
 
     @FXML
     private void onAdd() {
+        // Log add button click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "EMPLOYEE_ADD_CLICK",
+                "LOW",
+                currentUser,
+                "Clicked Add Employee button"
+            );
+        }
+        
         Dialog<Employee> dialog = buildEmployeeDialog(null);
         Optional<Employee> result = dialog.showAndWait();
         result.ifPresent(employee -> {
             if (addEmployeeToDatabase(employee)) {
+                // Log successful add
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "EMPLOYEE_ADD_SUCCESS",
+                        "MEDIUM",
+                        currentUser,
+                        "Added new employee: " + employee.getName() + " (Account: " + employee.getAccountNumber() + ", Position: " + employee.getPosition() + ")"
+                    );
+                }
                 loadEmployeesFromDatabase(); // Refresh the table
                 showSuccessAlert("Employee added successfully!");
+            } else {
+                // Log failed add
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "EMPLOYEE_ADD_FAILED",
+                        "MEDIUM",
+                        currentUser,
+                        "Failed to add employee: " + employee.getName() + " (Account: " + employee.getAccountNumber() + ")"
+                    );
+                }
             }
         });
     }
@@ -206,13 +412,47 @@ public class EmployeeController implements Initializable {
     @FXML
     private void onEdit() {
         Employee selected = table.getSelectionModel().getSelectedItem();
-        if (selected == null) { showInfo("Please select a row to edit."); return; }
+        if (selected == null) { 
+            showInfo("Please select a row to edit."); 
+            return; 
+        }
+        
+        // Log edit button click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "EMPLOYEE_EDIT_CLICK",
+                "LOW",
+                currentUser,
+                "Clicked Edit Employee button for: " + selected.getName() + " (ID: " + selected.getId() + ")"
+            );
+        }
+        
         Dialog<Employee> dialog = buildEmployeeDialog(selected);
         Optional<Employee> result = dialog.showAndWait();
         result.ifPresent(updated -> {
             if (updateEmployeeInDatabase(updated)) {
+                // Log successful edit
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "EMPLOYEE_EDIT_SUCCESS",
+                        "MEDIUM",
+                        currentUser,
+                        "Updated employee: " + updated.getName() + " (ID: " + updated.getId() + ", Account: " + updated.getAccountNumber() + ", Position: " + updated.getPosition() + ")"
+                    );
+                }
                 loadEmployeesFromDatabase(); // Refresh the table
                 showSuccessAlert("Employee updated successfully!");
+            } else {
+                // Log failed edit
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "EMPLOYEE_EDIT_FAILED",
+                        "MEDIUM",
+                        currentUser,
+                        "Failed to update employee: " + updated.getName() + " (ID: " + updated.getId() + ")"
+                    );
+                }
             }
         });
     }
@@ -220,7 +460,22 @@ public class EmployeeController implements Initializable {
     @FXML
     private void onDelete() {
         Employee selected = table.getSelectionModel().getSelectedItem();
-        if (selected == null) { showInfo("Please select a row to delete."); return; }
+        if (selected == null) { 
+            showInfo("Please select a row to delete."); 
+            return; 
+        }
+        
+        // Log delete button click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "EMPLOYEE_DELETE_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Delete Employee button for: " + selected.getName() + " (ID: " + selected.getId() + ", Account: " + selected.getAccountNumber() + ")"
+            );
+        }
+        
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
         confirm.setTitle("Delete Employee");
         confirm.setHeaderText(null);
@@ -228,8 +483,37 @@ public class EmployeeController implements Initializable {
         Optional<ButtonType> res = confirm.showAndWait();
         if (res.isPresent() && res.get() == ButtonType.OK) {
             if (deleteEmployeeFromDatabase(selected)) {
+                // Log successful delete
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "EMPLOYEE_DELETE_SUCCESS",
+                        "HIGH",
+                        currentUser,
+                        "Deleted employee: " + selected.getName() + " (ID: " + selected.getId() + ", Account: " + selected.getAccountNumber() + ", Position: " + selected.getPosition() + ")"
+                    );
+                }
                 loadEmployeesFromDatabase(); // Refresh the table
                 showSuccessAlert("Employee deleted successfully!");
+            } else {
+                // Log failed delete
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "EMPLOYEE_DELETE_FAILED",
+                        "MEDIUM",
+                        currentUser,
+                        "Failed to delete employee: " + selected.getName() + " (ID: " + selected.getId() + ")"
+                    );
+                }
+            }
+        } else {
+            // Log delete cancellation
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "EMPLOYEE_DELETE_CANCELLED",
+                    "LOW",
+                    currentUser,
+                    "Cancelled deletion of employee: " + selected.getName() + " (ID: " + selected.getId() + ")"
+                );
             }
         }
     }
@@ -241,12 +525,16 @@ public class EmployeeController implements Initializable {
         }
         
         try {
-            String query = "INSERT INTO employees (account_number, full_name, position, salary) VALUES (?, ?, ?, ?)";
+            String query = "INSERT INTO employees (account_number, full_name, position, salary_ref_id) VALUES (?, ?, ?, ?)";
             PreparedStatement stmt = connection.prepareStatement(query);
             stmt.setString(1, employee.getAccountNumber());
             stmt.setString(2, employee.getName());
             stmt.setString(3, employee.getPosition());
-            stmt.setDouble(4, employee.getSalary());
+            if (employee.getSalaryRefId() != null) {
+                stmt.setInt(4, employee.getSalaryRefId());
+            } else {
+                stmt.setNull(4, Types.INTEGER);
+            }
             
             int rowsAffected = stmt.executeUpdate();
             logger.info("Employee added to database: " + employee.getName());
@@ -270,12 +558,16 @@ public class EmployeeController implements Initializable {
         }
         
         try {
-            String query = "UPDATE employees SET account_number = ?, full_name = ?, position = ?, salary = ? WHERE id = ?";
+            String query = "UPDATE employees SET account_number = ?, full_name = ?, position = ?, salary_ref_id = ? WHERE id = ?";
             PreparedStatement stmt = connection.prepareStatement(query);
             stmt.setString(1, employee.getAccountNumber());
             stmt.setString(2, employee.getName());
             stmt.setString(3, employee.getPosition());
-            stmt.setDouble(4, employee.getSalary());
+            if (employee.getSalaryRefId() != null) {
+                stmt.setInt(4, employee.getSalaryRefId());
+            } else {
+                stmt.setNull(4, Types.INTEGER);
+            }
             stmt.setInt(5, employee.getId());
             
             int rowsAffected = stmt.executeUpdate();
@@ -393,21 +685,57 @@ public class EmployeeController implements Initializable {
         positionField.setStyle(fieldStyle);
         positionContainer.getChildren().addAll(positionLabel, positionField);
         
-        // Salary field
+        // Salary field - Changed to ComboBox
         javafx.scene.layout.VBox salaryContainer = new javafx.scene.layout.VBox(8);
         Label salaryLabel = new Label("Salary");
         salaryLabel.setStyle(labelStyle);
-        TextField salaryField = new TextField();
-        salaryField.setPromptText("Enter salary amount (e.g., 25000.00)");
-        salaryField.setStyle(fieldStyle);
-        salaryContainer.getChildren().addAll(salaryLabel, salaryField);
+        ComboBox<SalaryReferenceItem> salaryCombo = new ComboBox<>();
+        salaryCombo.setPromptText("Select salary");
+        salaryCombo.setStyle(fieldStyle);
+        
+        // Load salary references from database
+        ObservableList<SalaryReferenceItem> salaryReferences = FXCollections.observableArrayList();
+        try {
+            String sql = "SELECT id, monthly_salary FROM salary_reference ORDER BY monthly_salary";
+            PreparedStatement stmt = connection.prepareStatement(sql);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                salaryReferences.add(new SalaryReferenceItem(
+                    rs.getInt("id"),
+                    rs.getDouble("monthly_salary")
+                ));
+            }
+            salaryCombo.setItems(salaryReferences);
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error loading salary references", e);
+            showErrorAlert("Database Error", "Failed to load salary references: " + e.getMessage());
+        }
+        
+        salaryContainer.getChildren().addAll(salaryLabel, salaryCombo);
 
         // Populate fields if editing employee
         if (existing != null) {
             accountNumberField.setText(existing.getAccountNumber());
             nameField.setText(existing.getName());
             positionField.setText(existing.getPosition());
-            salaryField.setText(String.valueOf(existing.getSalary()));
+            
+            // Set selected salary reference in combo box
+            if (existing.getSalaryRefId() != null) {
+                for (SalaryReferenceItem item : salaryReferences) {
+                    if (item.getId() == existing.getSalaryRefId()) {
+                        salaryCombo.setValue(item);
+                        break;
+                    }
+                }
+            } else {
+                // If no salary_ref_id, try to find by salary amount
+                for (SalaryReferenceItem item : salaryReferences) {
+                    if (Math.abs(item.getMonthlySalary() - existing.getSalary()) < 0.01) {
+                        salaryCombo.setValue(item);
+                        break;
+                    }
+                }
+            }
         }
 
         // Add all form elements to form container
@@ -468,22 +796,8 @@ public class EmployeeController implements Initializable {
                 event.consume();
                 return;
             }
-            if (salaryField.getText().trim().isEmpty()) {
-                showErrorAlert("Validation Error", "Salary is required.");
-                event.consume();
-                return;
-            }
-            
-            // Validate salary is a valid number
-            try {
-                double salary = Double.parseDouble(salaryField.getText().trim());
-                if (salary < 0) {
-                    showErrorAlert("Validation Error", "Salary must be a positive number.");
-                    event.consume();
-                    return;
-                }
-            } catch (NumberFormatException ex) {
-                showErrorAlert("Validation Error", "Please enter a valid salary amount.");
+            if (salaryCombo.getValue() == null) {
+                showErrorAlert("Validation Error", "Please select a salary from the dropdown.");
                 event.consume();
                 return;
             }
@@ -491,24 +805,22 @@ public class EmployeeController implements Initializable {
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
-                try {
-                    double salary = Double.parseDouble(salaryField.getText().trim());
-                    
-                    // For existing employee, preserve the ID, for new employee, ID will be auto-generated
-                    int employeeId = (existing != null) ? existing.getId() : 0;
-                    
-                    return new Employee(
-                        employeeId, 
-                        accountNumberField.getText().trim(),
-                        nameField.getText().trim(), 
-                        positionField.getText().trim(), 
-                        salary
-                    );
-                } catch (NumberFormatException ex) {
-                    // This should not happen due to validation, but just in case
-                    showErrorAlert("Error", "Invalid salary format.");
+                SalaryReferenceItem selectedSalary = salaryCombo.getValue();
+                if (selectedSalary == null) {
                     return null;
                 }
+                
+                // For existing employee, preserve the ID, for new employee, ID will be auto-generated
+                int employeeId = (existing != null) ? existing.getId() : 0;
+                
+                return new Employee(
+                    employeeId, 
+                    accountNumberField.getText().trim(),
+                    nameField.getText().trim(), 
+                    positionField.getText().trim(), 
+                    selectedSalary.getMonthlySalary(),
+                    selectedSalary.getId()
+                );
             }
             return null;
         });

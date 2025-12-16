@@ -20,7 +20,7 @@
 <children>
 <Label text="Attendance Processing Engine" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
 <Region HBox.hgrow="ALWAYS" />
-<Button text="Process All Attendance" onAction="#onProcessAll" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" />
+<Button fx:id="processAllButton" text="Process All Attendance" onAction="#onProcessAll" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" />
 </children>
 <effect>
 <DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
@@ -35,8 +35,8 @@
 <Label text="To:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
 <DatePicker fx:id="dateToPicker" prefWidth="150.0" style="-fx-background-radius: 6;" />
 <TextField fx:id="searchField" promptText="Search employee name or ID" prefWidth="200.0" style="-fx-background-radius: 6;" />
-<Button text="Process Selected Period" onAction="#onProcessDateRange" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
-<Button text="View Details" onAction="#onViewDetails" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
+<Button fx:id="processDateRangeButton" text="Process Selected Period" onAction="#onProcessDateRange" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
+<Button fx:id="viewDetailsButton" text="View Details" onAction="#onViewDetails" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
 </children>
 <effect>
 <DropShadow radius="4.0" color="#00000020" offsetY="2.0" />

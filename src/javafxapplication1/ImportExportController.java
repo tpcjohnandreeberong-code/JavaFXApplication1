@@ -25,9 +25,13 @@ import java.util.ResourceBundle;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import javafx.application.Platform;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class ImportExportController implements Initializable {
 
+    private static final Logger logger = Logger.getLogger(ImportExportController.class.getName());
+    
     // Database connection constants
     private static final String DB_URL = DatabaseConfig.getDbUrl();
     private static final String DB_USER = DatabaseConfig.getDbUser();
@@ -87,6 +91,12 @@ public class ImportExportController implements Initializable {
     @FXML private TableColumn<ImportPreviewData, String> colPreview4;
     @FXML private TableColumn<ImportPreviewData, String> colPreview5;
     @FXML private TableColumn<ImportPreviewData, String> colPreview6;
+    
+    // Action buttons
+    @FXML private Button importAttendanceLogButton;
+    @FXML private Button browseFileButton;
+    @FXML private Button previewDataButton;
+    @FXML private Button importNowButton;
 
     private final ObservableList<String> dataTypes = FXCollections.observableArrayList();
     private final ObservableList<String> fileFormats = FXCollections.observableArrayList();
@@ -101,6 +111,123 @@ public class ImportExportController implements Initializable {
         setupTableColumns();
         preloadEmployeeCache(); // Preload all employees for faster lookups
         refreshAttendancePreview(); // Load real attendance data instead of sample data
+        
+        // Setup permission-based button visibility
+        setupPermissionBasedVisibility();
+        
+        // Log module access
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "ATTENDANCE_LOG_MANAGER_MODULE_ACCESS",
+                "LOW",
+                currentUser,
+                "Accessed Attendance Log Manager module"
+            );
+        }
+    }
+    
+    private void setupPermissionBasedVisibility() {
+        try {
+            // Get current user from SessionManager
+            SessionManager sessionManager = SessionManager.getInstance();
+            
+            if (sessionManager.isLoggedIn()) {
+                String currentUser = sessionManager.getCurrentUser();
+                logger.info("Setting up permission-based visibility for user: " + currentUser);
+                
+                // Check user permissions
+                boolean canImport = hasUserPermission(currentUser, "import_export.import");
+                boolean canExport = hasUserPermission(currentUser, "import_export.export");
+                
+                // Show/hide buttons based on permissions
+                // All import-related buttons use import_export.import permission
+                if (importAttendanceLogButton != null) {
+                    importAttendanceLogButton.setVisible(canImport);
+                    importAttendanceLogButton.setManaged(canImport);
+                }
+                if (browseFileButton != null) {
+                    browseFileButton.setVisible(canImport);
+                    browseFileButton.setManaged(canImport);
+                }
+                if (previewDataButton != null) {
+                    previewDataButton.setVisible(canImport);
+                    previewDataButton.setManaged(canImport);
+                }
+                if (importNowButton != null) {
+                    importNowButton.setVisible(canImport);
+                    importNowButton.setManaged(canImport);
+                }
+                
+                logger.info("Import/Export buttons visibility - Import: " + canImport + ", Export: " + canExport);
+                
+            } else {
+                logger.warning("No user session found, hiding all action buttons");
+                hideAllActionButtons();
+            }
+            
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error setting up permission-based visibility", e);
+            hideAllActionButtons();
+        }
+    }
+    
+    private void hideAllActionButtons() {
+        if (importAttendanceLogButton != null) {
+            importAttendanceLogButton.setVisible(false);
+            importAttendanceLogButton.setManaged(false);
+        }
+        if (browseFileButton != null) {
+            browseFileButton.setVisible(false);
+            browseFileButton.setManaged(false);
+        }
+        if (previewDataButton != null) {
+            previewDataButton.setVisible(false);
+            previewDataButton.setManaged(false);
+        }
+        if (importNowButton != null) {
+            importNowButton.setVisible(false);
+            importNowButton.setManaged(false);
+        }
+    }
+    
+    private boolean hasUserPermission(String username, String permissionName) {
+        try (Connection conn = getConnection()) {
+            // Get user's role from database
+            String getRoleQuery = "SELECT role FROM users WHERE username = ?";
+            try (PreparedStatement getRoleStmt = conn.prepareStatement(getRoleQuery)) {
+                getRoleStmt.setString(1, username);
+                try (ResultSet roleRs = getRoleStmt.executeQuery()) {
+                    if (roleRs.next()) {
+                        String userRole = roleRs.getString("role");
+                        
+                        // Check if role has the permission
+                        String checkPermissionQuery = "SELECT COUNT(*) FROM role_permissions rp " +
+                                                   "JOIN roles r ON rp.role_id = r.role_id " +
+                                                   "JOIN permissions p ON rp.permission_id = p.permission_id " +
+                                                   "WHERE r.role_name = ? AND p.permission_name = ? AND rp.granted = TRUE";
+                        try (PreparedStatement checkPermissionStmt = conn.prepareStatement(checkPermissionQuery)) {
+                            checkPermissionStmt.setString(1, userRole);
+                            checkPermissionStmt.setString(2, permissionName);
+                            try (ResultSet permissionRs = checkPermissionStmt.executeQuery()) {
+                                if (permissionRs.next()) {
+                                    boolean hasPermission = permissionRs.getInt(1) > 0;
+                                    logger.info("User " + username + " (Role: " + userRole + ") has permission " + permissionName + ": " + hasPermission);
+                                    return hasPermission;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return false;
+            
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error checking user permission", e);
+            // If database error occurs, default to admin permissions for admin user
+            return username != null && username.equals("admin");
+        }
     }
 
     // Database connection method
@@ -209,6 +336,17 @@ public class ImportExportController implements Initializable {
 
     @FXML
     private void onImportData() {
+        // Log import button click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "ATTENDANCE_LOG_MANAGER_IMPORT_DATA_CLICK",
+                "LOW",
+                currentUser,
+                "Clicked Import Attendance Log button"
+            );
+        }
+        
         showImportDialog();
     }
 
@@ -222,10 +360,22 @@ public class ImportExportController implements Initializable {
 
     @FXML
     private void onBrowseImportFile() {
+        // Log browse file click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        String selectedFormat = importFileFormat.getValue();
+        
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "ATTENDANCE_LOG_MANAGER_BROWSE_FILE_CLICK",
+                "LOW",
+                currentUser,
+                "Clicked Browse Import Attendance Log File button - Format: " + (selectedFormat != null ? selectedFormat : "None")
+            );
+        }
+        
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Select File to Import");
         
-        String selectedFormat = importFileFormat.getValue();
         if (selectedFormat != null) {
             switch (selectedFormat) {
                 case "TXT/DAT (Biometric)":
@@ -247,11 +397,33 @@ public class ImportExportController implements Initializable {
         
         selectedImportFile = fileChooser.showOpenDialog(null);
         if (selectedImportFile != null) {
+            // Log file selection
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "ATTENDANCE_LOG_MANAGER_IMPORT_FILE_SELECTED",
+                    "MEDIUM",
+                    currentUser,
+                    "Selected file for import: " + selectedImportFile.getName() + 
+                    " (Format: " + (selectedFormat != null ? selectedFormat : "Unknown") + 
+                    ", Size: " + (selectedImportFile.length() / 1024) + " KB)"
+                );
+            }
+            
             // Show file loading progress
             showFileLoadingProgress("Processing attendance file...", "Reading file: " + selectedImportFile.getName());
             
             // Process file in background
             processFileInBackground(selectedImportFile);
+        } else {
+            // Log file selection cancelled
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "ATTENDANCE_LOG_MANAGER_IMPORT_FILE_SELECTION_CANCELLED",
+                    "LOW",
+                    currentUser,
+                    "Cancelled file selection dialog"
+                );
+            }
         }
     }
 
@@ -259,7 +431,29 @@ public class ImportExportController implements Initializable {
     private void onPreviewImportData() {
         if (selectedImportFile == null) {
             showAlert("Please select a file first.");
+            
+            // Log failed preview attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "ATTENDANCE_LOG_MANAGER_IMPORT_PREVIEW_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Attempted to preview import data but no file was selected"
+                );
+            }
             return;
+        }
+        
+        // Log preview click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "ATTENDANCE_LOG_MANAGER_IMPORT_PREVIEW_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Previewed import data from file: " + selectedImportFile.getName()
+            );
         }
         
         showAlert("Previewing data from " + selectedImportFile.getName() + "...");
@@ -268,8 +462,20 @@ public class ImportExportController implements Initializable {
 
     @FXML
     private void onImportNow() {
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        
         if (selectedImportFile == null) {
             showAlert("Please select a file to import.");
+            
+            // Log failed import attempt
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "ATTENDANCE_LOG_MANAGER_IMPORT_NOW_FAILED",
+                    "MEDIUM",
+                    currentUser,
+                    "Attempted to import but no file was selected"
+                );
+            }
             return;
         }
         
@@ -277,7 +483,28 @@ public class ImportExportController implements Initializable {
         
         if (fileFormat == null) {
             showAlert("Please select a file format.");
+            
+            // Log failed import attempt
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "ATTENDANCE_LOG_MANAGER_IMPORT_NOW_FAILED",
+                    "MEDIUM",
+                    currentUser,
+                    "Attempted to import but no file format was selected"
+                );
+            }
             return;
+        }
+        
+        // Log import now click
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "ATTENDANCE_LOG_MANAGER_IMPORT_NOW_CLICK",
+                "HIGH",
+                currentUser,
+                "Started import process - File: " + selectedImportFile.getName() + 
+                ", Format: " + fileFormat + ", Data Type: Attendance Data"
+            );
         }
         
         performImport("Attendance Data", fileFormat);
@@ -303,16 +530,57 @@ public class ImportExportController implements Initializable {
     // Search and Filter Methods
     @FXML
     private void onSearchKeyReleased() {
+        String searchText = searchField.getText() != null ? searchField.getText().trim() : "";
+        
+        // Log search activity (only if there's actual text)
+        if (!searchText.isEmpty()) {
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "ATTENDANCE_LOG_MANAGER_IMPORT_EXPORT_SEARCH",
+                    "LOW",
+                    currentUser,
+                    "Searched attendance records with keyword: '" + searchText + "'"
+                );
+            }
+        }
+        
         applyFilters();
     }
     
     @FXML
     private void onFilterChanged() {
+        String logType = logTypeFilter.getValue();
+        String dateText = dateFilter.getText() != null ? dateFilter.getText().trim() : "";
+        
+        // Log filter change
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "ATTENDANCE_LOG_MANAGER_IMPORT_EXPORT_FILTER_CHANGED",
+                "LOW",
+                currentUser,
+                "Changed filter - Log Type: " + (logType != null ? logType : "All") + 
+                ", Date: " + (dateText.isEmpty() ? "(none)" : dateText)
+            );
+        }
+        
         applyFilters();
     }
     
     @FXML
     private void onClearFilters() {
+        // Log clear filters
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "ATTENDANCE_LOG_MANAGER_IMPORT_EXPORT_CLEAR_FILTERS",
+                "LOW",
+                currentUser,
+                "Cleared all filters"
+            );
+        }
+        
         searchField.clear();
         dateFilter.clear();
         logTypeFilter.setValue("All Log Types");
@@ -366,7 +634,9 @@ public class ImportExportController implements Initializable {
             return;
         }
         
+        // Ensure progress bar is visible and properly initialized for low-end graphics
         importProgressBar.setVisible(true);
+        importProgressBar.setManaged(true);
         importProgressBar.setProgress(0);
         
         Task<Integer> importTask = new Task<Integer>() {
@@ -388,10 +658,25 @@ public class ImportExportController implements Initializable {
             @Override
             public void handle(WorkerStateEvent event) {
                 importProgressBar.setVisible(false);
+                int recordsImported = importTask.getValue();
+                
+                // Log successful import
+                String currentUser = SessionManager.getInstance().getCurrentUser();
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "ATTENDANCE_LOG_MANAGER_IMPORT_SUCCESS",
+                        "HIGH",
+                        currentUser,
+                        "Successfully imported " + recordsImported + " records - File: " + 
+                        (selectedImportFile != null ? selectedImportFile.getName() : "Unknown") + 
+                        ", Format: " + fileFormat + ", Data Type: " + dataType
+                    );
+                }
+                
                 showSuccessAlert("Import completed successfully!\n" + 
                                "Data Type: " + dataType + "\n" +
                                "Format: " + fileFormat + "\n" +
-                               "Records imported: " + importTask.getValue());
+                               "Records imported: " + recordsImported);
                 
                 // Reset the selected file and clear file info
                 selectedImportFile = null;
@@ -407,7 +692,22 @@ public class ImportExportController implements Initializable {
             @Override
             public void handle(WorkerStateEvent event) {
                 importProgressBar.setVisible(false);
-                showAlert("Import failed: " + importTask.getException().getMessage());
+                String errorMessage = importTask.getException().getMessage();
+                
+                // Log failed import
+                String currentUser = SessionManager.getInstance().getCurrentUser();
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "ATTENDANCE_LOG_MANAGER_IMPORT_FAILED",
+                        "HIGH",
+                        currentUser,
+                        "Failed to import data - File: " + 
+                        (selectedImportFile != null ? selectedImportFile.getName() : "Unknown") + 
+                        ", Format: " + fileFormat + ", Error: " + errorMessage
+                    );
+                }
+                
+                showAlert("Import failed: " + errorMessage);
             }
         });
         
@@ -1248,6 +1548,17 @@ public class ImportExportController implements Initializable {
      */
     @FXML
     private void onRefreshPreview() {
+        // Log refresh preview click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "IMPORT_EXPORT_REFRESH_PREVIEW",
+                "LOW",
+                currentUser,
+                "Refreshed attendance data preview"
+            );
+        }
+        
         refreshAttendancePreview();
         showAlert("Attendance data preview refreshed!");
     }
@@ -1257,6 +1568,17 @@ public class ImportExportController implements Initializable {
      */
     @FXML
     private void onShowStatistics() {
+        // Log show statistics click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "IMPORT_EXPORT_SHOW_STATISTICS",
+                "LOW",
+                currentUser,
+                "Viewed attendance database statistics"
+            );
+        }
+        
         Map<String, Integer> stats = getAttendanceStatistics();
         
         String message = "Attendance Database Statistics:\n\n" +
@@ -1272,34 +1594,49 @@ public class ImportExportController implements Initializable {
     private void showFileLoadingProgress(String title, String message) {
         Platform.runLater(() -> {
             // Unbind any existing bindings first
-            if (fileProgressLabel.textProperty().isBound()) {
+            if (fileProgressLabel != null && fileProgressLabel.textProperty().isBound()) {
                 fileProgressLabel.textProperty().unbind();
             }
-            if (fileProgressBar.progressProperty().isBound()) {
+            if (fileProgressBar != null && fileProgressBar.progressProperty().isBound()) {
                 fileProgressBar.progressProperty().unbind();
             }
             
-            fileLoadingLabel.setText(title);
-            fileProgressLabel.setText(message);
-            fileProgressBar.setProgress(0.0);
-            fileLoadingSection.setVisible(true);
-            fileLoadingSection.setManaged(true);
+            if (fileLoadingLabel != null) {
+                fileLoadingLabel.setText(title);
+            }
+            if (fileProgressLabel != null) {
+                fileProgressLabel.setText(message);
+            }
+            if (fileProgressBar != null) {
+                // Ensure progress bar is visible and properly initialized for low-end graphics
+                fileProgressBar.setVisible(true);
+                fileProgressBar.setManaged(true);
+                fileProgressBar.setProgress(0.0);
+            }
+            if (fileLoadingSection != null) {
+                fileLoadingSection.setVisible(true);
+                fileLoadingSection.setManaged(true);
+            }
         });
     }
     
     private void hideFileLoadingProgress() {
         Platform.runLater(() -> {
             // Unbind properties before hiding
-            if (fileProgressLabel.textProperty().isBound()) {
+            if (fileProgressLabel != null && fileProgressLabel.textProperty().isBound()) {
                 fileProgressLabel.textProperty().unbind();
             }
-            if (fileProgressBar.progressProperty().isBound()) {
+            if (fileProgressBar != null && fileProgressBar.progressProperty().isBound()) {
                 fileProgressBar.progressProperty().unbind();
             }
             
-            fileLoadingSection.setVisible(false);
-            fileLoadingSection.setManaged(false);
-            fileProgressBar.setProgress(0.0);
+            if (fileLoadingSection != null) {
+                fileLoadingSection.setVisible(false);
+                fileLoadingSection.setManaged(false);
+            }
+            if (fileProgressBar != null) {
+                fileProgressBar.setProgress(0.0);
+            }
         });
     }
     
@@ -1350,12 +1687,20 @@ public class ImportExportController implements Initializable {
         };
         
         // Bind progress to UI (only progress bar, not labels)
-        fileProgressBar.progressProperty().bind(fileTask.progressProperty());
+        if (fileProgressBar != null) {
+            // Ensure progress bar is visible and managed for low-end graphics
+            Platform.runLater(() -> {
+                fileProgressBar.setVisible(true);
+                fileProgressBar.setManaged(true);
+                fileProgressBar.setProgress(0.0);
+            });
+            fileProgressBar.progressProperty().bind(fileTask.progressProperty());
+        }
         
         // Update labels manually to avoid binding conflicts
         fileTask.messageProperty().addListener((obs, oldMessage, newMessage) -> {
             Platform.runLater(() -> {
-                if (!fileProgressLabel.textProperty().isBound()) {
+                if (fileProgressLabel != null && !fileProgressLabel.textProperty().isBound()) {
                     fileProgressLabel.setText(newMessage);
                 }
             });

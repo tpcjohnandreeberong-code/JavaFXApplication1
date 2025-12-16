@@ -28,8 +28,8 @@
 <children>
 <Label style="-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" text="Security Maintenance" />
 <Region HBox.hgrow="ALWAYS" />
-<Button onAction="#onRefresh" style="-fx-background-color: #4caf50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Refresh" />
-<Button onAction="#onExportSecurityLog" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Export Log" />
+<Button fx:id="refreshButton" onAction="#onRefresh" style="-fx-background-color: #4caf50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Refresh" />
+<Button fx:id="exportLogButton" onAction="#onExportSecurityLog" style="-fx-background-color: #1976d2; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Export Log" />
 </children>
 </HBox>
 <Label style="-fx-text-fill: #666; -fx-font-size: 14px;" text="Manage system security policies, user access controls, and security monitoring" />
@@ -112,8 +112,8 @@ END OF COMMENTED OUT PASSWORD POLICY TAB -->
 <TextField fx:id="searchField" promptText="Search security events..." style="-fx-background-radius: 6;" />
 <ComboBox fx:id="eventTypeFilter" prefWidth="150.0" promptText="All Events" style="-fx-background-radius: 6;" />
 <ComboBox fx:id="severityFilter" prefWidth="120.0" promptText="All Severity" style="-fx-background-radius: 6;" />
-<Button onAction="#onSearchSecurityEvents" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Search" />
-<Button onAction="#onClearSecurityLog" style="-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Clear Log" />
+<Button fx:id="searchButton" onAction="#onSearchSecurityEvents" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Search" />
+<Button fx:id="clearLogButton" onAction="#onClearSecurityLog" style="-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Clear Log" />
 </children>
 </HBox>
 <VBox spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;" VBox.vgrow="ALWAYS">

@@ -18,9 +18,13 @@ import java.time.format.DateTimeFormatter;
 import java.sql.*;
 import java.util.Optional;
 import javafx.scene.layout.GridPane;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class PayrollGeneratorController implements Initializable {
 
+    private static final Logger logger = Logger.getLogger(PayrollGeneratorController.class.getName());
+    
     // Database connection constants
     private static final String DB_URL = DatabaseConfig.getDbUrl();
     private static final String DB_USER = DatabaseConfig.getDbUser();
@@ -43,6 +47,10 @@ public class PayrollGeneratorController implements Initializable {
     @FXML private TableColumn<PayrollEntry, Double> colNetPay;
     @FXML private TableColumn<PayrollEntry, String> colStatus;
     @FXML private TableColumn<PayrollEntry, String> colCreatedDate;
+    @FXML private Button generatePayrollButton;
+    @FXML private Button addPayrollButton;
+    @FXML private Button editPayrollButton;
+    @FXML private Button deletePayrollButton;
 
     // Data
     private ObservableList<PayrollEntry> payrollData = FXCollections.observableArrayList();
@@ -52,6 +60,113 @@ public class PayrollGeneratorController implements Initializable {
         initializeTable();
         initializeFilters();
         loadPayrollData();
+        
+        // Setup permission-based button visibility
+        setupPermissionBasedVisibility();
+    }
+    
+    private void setupPermissionBasedVisibility() {
+        try {
+            // Get current user from SessionManager
+            SessionManager sessionManager = SessionManager.getInstance();
+            
+            if (sessionManager.isLoggedIn()) {
+                String currentUser = sessionManager.getCurrentUser();
+                logger.info("Setting up permission-based visibility for user: " + currentUser);
+                
+                // Check user permissions
+                // Generate and Add both use payroll_gen.add permission
+                boolean canAdd = hasUserPermission(currentUser, "payroll_gen.add");
+                boolean canEdit = hasUserPermission(currentUser, "payroll_gen.edit");
+                boolean canDelete = hasUserPermission(currentUser, "payroll_gen.delete");
+                
+                // Show/hide buttons based on permissions
+                if (generatePayrollButton != null) {
+                    generatePayrollButton.setVisible(canAdd);
+                    generatePayrollButton.setManaged(canAdd);
+                }
+                if (addPayrollButton != null) {
+                    addPayrollButton.setVisible(canAdd);
+                    addPayrollButton.setManaged(canAdd);
+                }
+                if (editPayrollButton != null) {
+                    editPayrollButton.setVisible(canEdit);
+                    editPayrollButton.setManaged(canEdit);
+                }
+                if (deletePayrollButton != null) {
+                    deletePayrollButton.setVisible(canDelete);
+                    deletePayrollButton.setManaged(canDelete);
+                }
+                
+                logger.info("Payroll Generator buttons visibility - Add/Generate: " + canAdd + ", Edit: " + canEdit + ", Delete: " + canDelete);
+                
+            } else {
+                logger.warning("No user session found, hiding all action buttons");
+                hideAllActionButtons();
+            }
+            
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error setting up permission-based visibility", e);
+            hideAllActionButtons();
+        }
+    }
+    
+    private void hideAllActionButtons() {
+        if (generatePayrollButton != null) {
+            generatePayrollButton.setVisible(false);
+            generatePayrollButton.setManaged(false);
+        }
+        if (addPayrollButton != null) {
+            addPayrollButton.setVisible(false);
+            addPayrollButton.setManaged(false);
+        }
+        if (editPayrollButton != null) {
+            editPayrollButton.setVisible(false);
+            editPayrollButton.setManaged(false);
+        }
+        if (deletePayrollButton != null) {
+            deletePayrollButton.setVisible(false);
+            deletePayrollButton.setManaged(false);
+        }
+    }
+    
+    private boolean hasUserPermission(String username, String permissionName) {
+        try (Connection conn = getConnection()) {
+            // Get user's role from database
+            String getRoleQuery = "SELECT role FROM users WHERE username = ?";
+            try (PreparedStatement getRoleStmt = conn.prepareStatement(getRoleQuery)) {
+                getRoleStmt.setString(1, username);
+                try (ResultSet roleRs = getRoleStmt.executeQuery()) {
+                    if (roleRs.next()) {
+                        String userRole = roleRs.getString("role");
+                        
+                        // Check if role has the permission
+                        String checkPermissionQuery = "SELECT COUNT(*) FROM role_permissions rp " +
+                                                   "JOIN roles r ON rp.role_id = r.role_id " +
+                                                   "JOIN permissions p ON rp.permission_id = p.permission_id " +
+                                                   "WHERE r.role_name = ? AND p.permission_name = ? AND rp.granted = TRUE";
+                        try (PreparedStatement checkPermissionStmt = conn.prepareStatement(checkPermissionQuery)) {
+                            checkPermissionStmt.setString(1, userRole);
+                            checkPermissionStmt.setString(2, permissionName);
+                            try (ResultSet permissionRs = checkPermissionStmt.executeQuery()) {
+                                if (permissionRs.next()) {
+                                    boolean hasPermission = permissionRs.getInt(1) > 0;
+                                    logger.info("User " + username + " (Role: " + userRole + ") has permission " + permissionName + ": " + hasPermission);
+                                    return hasPermission;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return false;
+            
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error checking user permission", e);
+            // If database error occurs, default to admin permissions for admin user
+            return username != null && username.equals("admin");
+        }
     }
 
     // Database connection method
@@ -123,21 +238,21 @@ public class PayrollGeneratorController implements Initializable {
                 
                 String sql = """
                     SELECT 
-                        ph.payroll_id,
-                        ph.employee_id,
+                        pp.id as payroll_id,
+                        pp.employee_id,
                         e.full_name as employee_name,
                         e.position,
-                        ph.pay_period,
-                        ph.basic_salary,
-                        ph.overtime,
-                        ph.allowances,
-                        ph.deductions,
-                        ph.net_pay,
-                        ph.status,
-                        ph.created_date
-                    FROM payroll_history ph
-                    JOIN employees e ON ph.employee_id = e.id
-                    ORDER BY ph.created_date DESC
+                        CONCAT(pp.pay_period_start, ' to ', pp.pay_period_end) as pay_period,
+                        pp.basic_salary,
+                        pp.overtime_pay as overtime,
+                        pp.allowances,
+                        pp.total_deductions as deductions,
+                        pp.net_pay,
+                        pp.status,
+                        pp.processed_at as created_date
+                    FROM payroll_process pp
+                    JOIN employees e ON pp.employee_id = e.id
+                    ORDER BY pp.processed_at DESC
                     """;
                 
                 try (Connection conn = getConnection();
@@ -210,6 +325,119 @@ public class PayrollGeneratorController implements Initializable {
     @FXML
     private void onAddPayroll(ActionEvent event) {
         showAddPayrollDialog();
+    }
+
+    @FXML
+    private void onGeneratePayroll(ActionEvent event) {
+        showGeneratePayrollDialog();
+    }
+
+    private void showGeneratePayrollDialog() {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Generate LGU Payroll");
+        dialog.setHeaderText("Generate payroll using LGU calculation logic");
+        
+        // Set the button types
+        ButtonType generateButtonType = new ButtonType("Generate All", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(generateButtonType, ButtonType.CANCEL);
+        
+        // Create the form
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new javafx.geometry.Insets(20, 150, 10, 10));
+        
+        DatePicker startDatePicker = new DatePicker();
+        DatePicker endDatePicker = new DatePicker();
+        
+        // Set default values for current period
+        LocalDate now = LocalDate.now();
+        startDatePicker.setValue(now.withDayOfMonth(1));
+        endDatePicker.setValue(now.withDayOfMonth(15)); // First half of month
+        
+        grid.add(new Label("Start Date:"), 0, 0);
+        grid.add(startDatePicker, 1, 0);
+        grid.add(new Label("End Date:"), 0, 1);
+        grid.add(endDatePicker, 1, 1);
+        
+        Label infoLabel = new Label("This will generate payroll for all active employees\nusing the LGU calculation logic with:\n• Basic Pay = Monthly Salary / 2\n• Overload = Units × (Monthly Salary / 24) for instructors\n• Government deductions (PAG-IBIG, Expanded Tax, GVAT)\n• Attendance-based deductions");
+        infoLabel.setStyle("-fx-text-fill: blue; -fx-font-size: 12px;");
+        grid.add(infoLabel, 0, 2, 2, 1);
+        
+        dialog.getDialogPane().setContent(grid);
+        
+        // Convert the result when the generate button is clicked
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == generateButtonType) {
+                LocalDate startDate = startDatePicker.getValue();
+                LocalDate endDate = endDatePicker.getValue();
+                
+                if (startDate == null || endDate == null) {
+                    showErrorAlert("Validation Error", "Please select both start and end dates.");
+                    return null;
+                }
+                
+                if (startDate.isAfter(endDate)) {
+                    showErrorAlert("Validation Error", "Start date must be before end date.");
+                    return null;
+                }
+                
+                generatePayrollForAllEmployees(startDate, endDate);
+            }
+            return null;
+        });
+        
+        dialog.showAndWait();
+    }
+
+    private void generatePayrollForAllEmployees(LocalDate startDate, LocalDate endDate) {
+        Task<Void> generateTask = new Task<Void>() {
+            @Override
+            protected Void call() throws Exception {
+                // Call the stored procedure to generate payroll
+                String sql = "CALL sp_generate_payroll(?, ?, ?)";
+                
+                try (Connection conn = getConnection();
+                     PreparedStatement stmt = conn.prepareStatement(sql)) {
+                    
+                    stmt.setDate(1, java.sql.Date.valueOf(startDate));
+                    stmt.setDate(2, java.sql.Date.valueOf(endDate));
+                    stmt.setString(3, "SYSTEM_AUTO"); // processed_by
+                    
+                    stmt.execute();
+                }
+                
+                return null;
+            }
+        };
+        
+        generateTask.setOnSucceeded(e -> {
+            Platform.runLater(() -> {
+                showInfoAlert("Success", 
+                    "Payroll generated successfully for period: " + 
+                    startDate + " to " + endDate + 
+                    "\n\nUsing LGU calculation logic:\n" +
+                    "• Instructors: Basic pay + Overload based on units\n" +
+                    "• Staff: Basic pay only\n" +
+                    "• All deductions applied automatically");
+                loadPayrollData(); // Refresh the table
+            });
+        });
+        
+        generateTask.setOnFailed(e -> {
+            Throwable exception = generateTask.getException();
+            Platform.runLater(() -> {
+                showErrorAlert("Generation Error", 
+                    "Failed to generate payroll: " + exception.getMessage() + 
+                    "\n\nPlease check:\n" +
+                    "• Database connection\n" +
+                    "• Employee salary references\n" +
+                    "• Processed attendance data");
+                exception.printStackTrace();
+            });
+        });
+        
+        new Thread(generateTask).start();
     }
 
     private void showAddPayrollDialog() {
@@ -429,7 +657,13 @@ public class PayrollGeneratorController implements Initializable {
             protected ObservableList<Employee> call() throws Exception {
                 ObservableList<Employee> employees = FXCollections.observableArrayList();
                 
-                String sql = "SELECT id, account_number, full_name, position, salary FROM employees WHERE status = 'Active' ORDER BY full_name";
+                String sql = """
+                    SELECT e.id, e.account_number, e.full_name, e.position, sr.monthly_salary as salary,
+                           e.employment_type, e.assigned_units
+                    FROM employees e 
+                    JOIN salary_reference sr ON e.salary_ref_id = sr.id
+                    WHERE e.status = 'Active' ORDER BY e.full_name
+                    """;
                 
                 try (Connection conn = getConnection();
                      PreparedStatement stmt = conn.prepareStatement(sql);
@@ -470,22 +704,28 @@ public class PayrollGeneratorController implements Initializable {
             @Override
             protected Void call() throws Exception {
                 String sql = """
-                    INSERT INTO payroll_history 
-                    (employee_id, pay_period, basic_salary, overtime, allowances, deductions, net_pay, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO payroll_process 
+                    (employee_id, account_number, pay_period_start, pay_period_end, basic_salary, 
+                     overtime_pay, allowances, total_deductions, net_pay, status, processed_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYSTEM')
                     """;
                 
                 try (Connection conn = getConnection();
                      PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                     
+                    // Parse pay period
+                    String[] dates = entry.getPayPeriod().split(" to ");
+                    
                     stmt.setInt(1, entry.getEmployeeId());
-                    stmt.setString(2, entry.getPayPeriod());
-                    stmt.setDouble(3, entry.getBasicSalary());
-                    stmt.setDouble(4, entry.getOvertime());
-                    stmt.setDouble(5, entry.getAllowances());
-                    stmt.setDouble(6, entry.getDeductions());
-                    stmt.setDouble(7, entry.getNetPay());
-                    stmt.setString(8, entry.getStatus());
+                    stmt.setString(2, "EMP" + entry.getEmployeeId()); // account_number
+                    stmt.setDate(3, java.sql.Date.valueOf(dates[0]));
+                    stmt.setDate(4, java.sql.Date.valueOf(dates[1]));
+                    stmt.setDouble(5, entry.getBasicSalary());
+                    stmt.setDouble(6, entry.getOvertime());
+                    stmt.setDouble(7, entry.getAllowances());
+                    stmt.setDouble(8, entry.getDeductions());
+                    stmt.setDouble(9, entry.getNetPay());
+                    stmt.setString(10, entry.getStatus());
                     
                     stmt.executeUpdate();
                     

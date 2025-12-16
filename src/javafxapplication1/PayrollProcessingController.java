@@ -10,6 +10,21 @@ import javafx.event.ActionEvent;
 import javafx.scene.control.Alert.AlertType;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
+import javafx.stage.Stage;
+import javafx.stage.Modality;
+import javafx.scene.Scene;
+import javafx.scene.layout.VBox;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.BorderPane;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
+import javafx.print.PrinterJob;
+import javafx.print.Printer;
+import javafx.print.PageLayout;
+import javafx.print.PageOrientation;
 
 import java.net.URL;
 import java.util.ResourceBundle;
@@ -51,6 +66,17 @@ public class PayrollProcessingController implements Initializable {
         initializeTable();
         initializeFilters();
         loadPayrollData();
+        
+        // Log module access
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "PAYROLL_PROCESSING_MODULE_ACCESS",
+                "LOW",
+                currentUser,
+                "Accessed Payroll Processing module"
+            );
+        }
     }
 
     // Database connection method
@@ -122,10 +148,50 @@ public class PayrollProcessingController implements Initializable {
         yearFilter.setItems(yearList);
         yearFilter.setValue(String.valueOf(currentYear)); // Set current year as default
         
-        // Add listeners for real-time filtering
-        searchField.textProperty().addListener((obs, oldVal, newVal) -> filterPayrollData());
-        monthFilter.valueProperty().addListener((obs, oldVal, newVal) -> filterPayrollData());
-        yearFilter.valueProperty().addListener((obs, oldVal, newVal) -> filterPayrollData());
+        // Add listeners for real-time filtering (with logging for significant changes)
+        searchField.textProperty().addListener((obs, oldVal, newVal) -> {
+            // Only log if there's actual text change (not just clearing)
+            if (newVal != null && !newVal.trim().isEmpty() && (oldVal == null || oldVal.trim().isEmpty())) {
+                String currentUser = SessionManager.getInstance().getCurrentUser();
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "PAYROLL_PROCESSING_SEARCH",
+                        "LOW",
+                        currentUser,
+                        "Searched payroll records with keyword: '" + newVal.trim() + "'"
+                    );
+                }
+            }
+            filterPayrollData();
+        });
+        monthFilter.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && !newVal.equals(oldVal)) {
+                String currentUser = SessionManager.getInstance().getCurrentUser();
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "PAYROLL_FILTER_MONTH",
+                        "LOW",
+                        currentUser,
+                        "Filtered payroll records by month: " + newVal
+                    );
+                }
+            }
+            filterPayrollData();
+        });
+        yearFilter.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && !newVal.equals(oldVal)) {
+                String currentUser = SessionManager.getInstance().getCurrentUser();
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "PAYROLL_FILTER_YEAR",
+                        "LOW",
+                        currentUser,
+                        "Filtered payroll records by year: " + newVal
+                    );
+                }
+            }
+            filterPayrollData();
+        });
         
         // Add listener to date pickers to update month/year filters accordingly
         startDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> {
@@ -339,6 +405,19 @@ public class PayrollProcessingController implements Initializable {
         LocalDate startDate = startDatePicker.getValue();
         LocalDate endDate = endDatePicker.getValue();
         
+        // Log generate payroll click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "PAYROLL_GENERATE_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Generate Payroll button - Period: " + 
+                (startDate != null ? startDate.toString() : "N/A") + " to " + 
+                (endDate != null ? endDate.toString() : "N/A")
+            );
+        }
+        
         if (startDate == null || endDate == null) {
             showErrorAlert("Invalid Date Range", "Please select both start and end dates for the pay period.");
             return;
@@ -453,6 +532,13 @@ public class PayrollProcessingController implements Initializable {
                                 insertStmt.setDouble(14, calc.netPay);
                                 
                                 insertStmt.executeUpdate();
+                                
+                                // Update loan balances after payroll is saved
+                                double totalLoanDeduction = getAllLoanDeductions(conn, employeeId);
+                                if (totalLoanDeduction > 0) {
+                                    updateLoanBalanceAfterPayroll(conn, employeeId, totalLoanDeduction);
+                                }
+                                
                                 generatedCount++;
                             }
                         }
@@ -470,6 +556,18 @@ public class PayrollProcessingController implements Initializable {
         generateTask.setOnSucceeded(e -> {
             Platform.runLater(() -> {
                 String result = generateTask.getValue();
+                
+                // Log successful payroll generation
+                String currentUser = SessionManager.getInstance().getCurrentUser();
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "PAYROLL_GENERATE_SUCCESS",
+                        "HIGH",
+                        currentUser,
+                        "Successfully generated payroll - Period: " + startDate + " to " + endDate + " - " + result
+                    );
+                }
+                
                 showInfoAlert("Payroll Generation Complete", result);
                 loadPayrollData(); // Refresh the table
             });
@@ -478,6 +576,18 @@ public class PayrollProcessingController implements Initializable {
         generateTask.setOnFailed(e -> {
             Throwable exception = generateTask.getException();
             Platform.runLater(() -> {
+                // Log failed payroll generation
+                String currentUser = SessionManager.getInstance().getCurrentUser();
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "PAYROLL_GENERATE_FAILED",
+                        "HIGH",
+                        currentUser,
+                        "Failed to generate payroll - Period: " + startDate + " to " + endDate + 
+                        " - Error: " + exception.getMessage()
+                    );
+                }
+                
                 showErrorAlert("Payroll Generation Error", 
                              "Failed to generate payroll: " + exception.getMessage());
                 exception.printStackTrace(); // For debugging
@@ -494,6 +604,34 @@ public class PayrollProcessingController implements Initializable {
         calc.basicSalary = basicSalary;
         calc.allowances = 0.0; // Can be enhanced later
         
+        // Get employee employment type and assigned units
+        String employeeInfoSQL = """
+            SELECT employment_type, assigned_units 
+            FROM employees 
+            WHERE id = ?
+            """;
+        
+        String employmentType = null;
+        Integer assignedUnits = null;
+        try (PreparedStatement stmt = conn.prepareStatement(employeeInfoSQL)) {
+            stmt.setInt(1, employeeId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                employmentType = rs.getString("employment_type");
+                if (rs.wasNull()) {
+                    employmentType = null;
+                }
+                assignedUnits = rs.getInt("assigned_units");
+                if (rs.wasNull()) {
+                    assignedUnits = null;
+                }
+            }
+        }
+        
+        // Determine if employee is instructor
+        boolean isInstructor = employmentType != null && 
+                              (employmentType.equals("INSTRUCTOR") || employmentType.equals("TEMPORARY_INSTRUCTOR"));
+        
         // Get processed attendance data
         String attendanceSQL = """
             SELECT 
@@ -501,10 +639,15 @@ public class PayrollProcessingController implements Initializable {
                 SUM(overtime_hours) as total_overtime,
                 SUM(late_minutes) as total_late_minutes,
                 SUM(absent_days) as total_absent_days,
+                SUM(half_days) as total_half_days,
                 COUNT(*) as present_days
             FROM processed_attendance 
             WHERE employee_id = ? AND process_date BETWEEN ? AND ?
             """;
+        
+        int totalLateMinutes = 0;
+        int totalAbsentDays = 0;
+        int totalHalfDays = 0;
         
         try (PreparedStatement stmt = conn.prepareStatement(attendanceSQL)) {
             stmt.setInt(1, employeeId);
@@ -514,104 +657,234 @@ public class PayrollProcessingController implements Initializable {
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
                 calc.overtimeHours = rs.getDouble("total_overtime");
-                calc.totalLateMinutes = rs.getInt("total_late_minutes");
-                calc.absentDays = rs.getInt("total_absent_days");
+                totalLateMinutes = rs.getInt("total_late_minutes");
+                totalAbsentDays = rs.getInt("total_absent_days");
+                totalHalfDays = rs.getInt("total_half_days");
                 calc.presentDays = rs.getInt("present_days");
             }
         }
         
-        // Calculate working days in period
-        int totalWorkingDays = (int) startDate.datesUntil(endDate.plusDays(1))
-            .filter(date -> date.getDayOfWeek().getValue() <= 5) // Monday to Friday
-            .count();
+        calc.totalLateMinutes = totalLateMinutes;
+        calc.absentDays = totalAbsentDays;
+        calc.lateOccurrences = totalLateMinutes > 0 ? 1 : 0;
         
-        calc.lateOccurrences = calc.totalLateMinutes > 0 ? 1 : 0; // Simplified
+        // =====================================================
+        // LGU PAYROLL CALCULATION FORMULA
+        // =====================================================
         
-        // Calculate basic pay (prorated)
-        double dailyRate = calc.basicSalary / 22; // Assuming 22 working days per month
-        calc.basicPay = calc.presentDays * dailyRate;
+        double monthlySalary = basicSalary;
         
-        // Calculate overtime pay
-        double hourlyRate = calc.basicSalary / (22 * 8); // 22 working days, 8 hours per day
-        calc.overtimePay = calc.overtimeHours * hourlyRate * 1.5;
+        // 1. GROSS REGULAR - Depende sa period
+        // Determine period type based on dates
+        int startDay = startDate.getDayOfMonth();
+        int endDay = endDate.getDayOfMonth();
+        int daysInPeriod = (int) java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate) + 1;
         
-        // Calculate deductions
-        calc.totalDeductions = 0;
-        
-        // Get employee type to determine which deductions to apply
-        String employeeTypeSQL = """
-            SELECT position FROM employees WHERE id = ?
-            """;
-        
-        boolean isContractor = false;
-        try (PreparedStatement typeStmt = conn.prepareStatement(employeeTypeSQL)) {
-            typeStmt.setInt(1, employeeId);
-            ResultSet typeRs = typeStmt.executeQuery();
-            if (typeRs.next()) {
-                String position = typeRs.getString("position");
-                // Check if employee is contractor/instructor
-                isContractor = position != null && 
-                              (position.toLowerCase().contains("instructor") || 
-                               position.toLowerCase().contains("contractor"));
-            }
-        }
-        
-        // Apply different deductions based on employee type
-        String deductionTypesSQL;
-        if (isContractor) {
-            // For contractors/instructors: EVAT 5% + Expanded 3%
-            deductionTypesSQL = """
-                SELECT name, fixed_amount, percentage 
-                FROM deduction_types 
-                WHERE name IN ('GVAT', 'Expanded Tax')
-                """;
+        double grossRegular;
+        // If period is 1-15 or 16-30/31 (half month) = monthly_salary / 2
+        // If period is 1-30/31 (full month) = monthly_salary
+        if ((startDay == 1 && endDay == 15) || (startDay == 16 && endDay >= 28 && endDay <= 31)) {
+            // Half month period
+            grossRegular = monthlySalary / 2.0;
+        } else if (startDay == 1 && (endDay == 30 || endDay == 31)) {
+            // Full month period
+            grossRegular = monthlySalary;
         } else {
-            // For regular employees: standard government deductions
-            deductionTypesSQL = """
-                SELECT name, fixed_amount, percentage 
-                FROM deduction_types 
-                WHERE name IN ('PhilHealth', 'Withholding Tax', 'Pag-ibig', 'SSS')
-                """;
+            // Prorated based on number of days
+            // Calculate based on working days in period vs working days in month
+            int workingDaysInPeriod = daysInPeriod; // Simplified - can be enhanced
+            int workingDaysInMonth = 22; // Standard working days
+            grossRegular = (monthlySalary / workingDaysInMonth) * workingDaysInPeriod;
         }
+        calc.basicPay = grossRegular;
         
-        try (PreparedStatement stmt = conn.prepareStatement(deductionTypesSQL)) {
-            ResultSet rs = stmt.executeQuery();
-            while (rs.next()) {
-                Double fixedAmount = rs.getDouble("fixed_amount");
-                Double percentage = rs.getDouble("percentage");
-                
-                if (fixedAmount != null && fixedAmount > 0) {
-                    calc.totalDeductions += fixedAmount;
-                } else if (percentage != null && percentage > 0) {
-                    calc.totalDeductions += (calc.basicSalary * percentage / 100);
-                }
+        // 2. OVERLOAD COMPUTATION (Instructors only)
+        double overloadAmount = 0.0;
+        if (isInstructor && assignedUnits != null && assignedUnits > 0) {
+            // rate per unit = monthly salary ÷ 24
+            double ratePerUnit = monthlySalary / 24.0;
+            // overload_amount = units * rate_per_unit
+            double monthlyOverload = assignedUnits * ratePerUnit;
+            
+            // Prorate overload based on period (same logic as grossRegular)
+            if ((startDay == 1 && endDay == 15) || (startDay == 16 && endDay >= 28 && endDay <= 31)) {
+                // Half month period
+                overloadAmount = monthlyOverload / 2.0;
+            } else if (startDay == 1 && (endDay == 30 || endDay == 31)) {
+                // Full month period
+                overloadAmount = monthlyOverload;
+            } else {
+                // Prorated based on number of days
+                int workingDaysInPeriod = daysInPeriod;
+                int workingDaysInMonth = 22;
+                overloadAmount = (monthlyOverload / workingDaysInMonth) * workingDaysInPeriod;
             }
         }
+        calc.overtimePay = overloadAmount; // Store overload in overtimePay field for now
         
-        // Employee-specific deductions
-        String employeeDeductionsSQL = """
-            SELECT ed.amount 
-            FROM employee_deductions ed
-            WHERE ed.employee_id = ?
+        // 3. GROSS TOTAL
+        double grossTotal = grossRegular + overloadAmount;
+        
+        // 4. ATTENDANCE DEDUCTIONS
+        // Daily rate = monthly_salary / 22
+        double dailyRate = monthlySalary / 22.0;
+        // Hourly rate = daily_rate / 8
+        double hourlyRate = dailyRate / 8.0;
+        // Minute rate = hourly_rate / 60
+        double minuteRate = hourlyRate / 60.0;
+        
+        // Tardiness deduction
+        double tardinessDeduction = minuteRate * totalLateMinutes;
+        
+        // Absence deduction (full days + half days)
+        double absenceDeduction = (totalAbsentDays * dailyRate) + (totalHalfDays * (dailyRate / 2.0));
+        
+        // 5. GROSS EARNED
+        double grossEarned = grossTotal - tardinessDeduction - absenceDeduction;
+        
+        // 6. DEDUCTIONS
+        double totalDeductions = 0.0;
+        
+        // 6.1 PAG-IBIG Premium (Fixed ₱200.00)
+        double pagibigPremium = 200.0;
+        totalDeductions += pagibigPremium;
+        
+        // 6.2 All Active Loans (MPL Loan, Calamity Loan, etc.)
+        double totalLoanDeduction = getAllLoanDeductions(conn, employeeId);
+        totalDeductions += totalLoanDeduction;
+        
+        // 6.3 Tax Deductions (Only if gross_earned >= 20,000)
+        double expandedTax = 0.0;
+        double gvat = 0.0;
+        if (grossEarned >= 20000.0) {
+            // 6.4 Expanded Tax (5% of gross_earned)
+            expandedTax = grossEarned * 0.05;
+            totalDeductions += expandedTax;
+            
+            // 6.5 GVAT (3% of gross_earned)
+            gvat = grossEarned * 0.03;
+            totalDeductions += gvat;
+        }
+        
+        calc.totalDeductions = totalDeductions;
+        
+        // 7. NET AMOUNT DUE
+        calc.netPay = grossEarned - totalDeductions;
+        
+        return calc;
+    }
+    
+    /**
+     * Get loan amount for employee (MPL or Calamity Loan)
+     */
+    private double getLoanAmount(Connection conn, int employeeId, String loanTypeName) throws SQLException {
+        String sql = """
+            SELECT el.monthly_amortization, el.balance, el.id as loan_id
+            FROM employee_loans el
+            JOIN loan_types lt ON el.loan_type_id = lt.id
+            WHERE el.employee_id = ? 
+            AND lt.name = ?
+            AND el.status = 'Active' 
+            AND el.balance > 0
+            LIMIT 1
             """;
         
-        try (PreparedStatement stmt = conn.prepareStatement(employeeDeductionsSQL)) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, employeeId);
+            stmt.setString(2, loanTypeName);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                double amortization = rs.getDouble("monthly_amortization");
+                double balance = rs.getDouble("balance");
+                // Return the minimum of amortization and balance
+                return Math.min(amortization, balance);
+            }
+        }
+        return 0.0;
+    }
+    
+    /**
+     * Get all active loans for an employee and return total deduction amount
+     */
+    private double getAllLoanDeductions(Connection conn, int employeeId) throws SQLException {
+        String sql = """
+            SELECT el.id, el.monthly_amortization, el.balance, lt.name as loan_type
+            FROM employee_loans el
+            JOIN loan_types lt ON el.loan_type_id = lt.id
+            WHERE el.employee_id = ? 
+            AND el.status = 'Active' 
+            AND el.balance > 0
+            """;
+        
+        double totalLoanDeduction = 0.0;
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, employeeId);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
-                calc.totalDeductions += rs.getDouble("amount");
+                double amortization = rs.getDouble("monthly_amortization");
+                double balance = rs.getDouble("balance");
+                // Add the minimum of amortization and balance
+                totalLoanDeduction += Math.min(amortization, balance);
             }
         }
+        return totalLoanDeduction;
+    }
+    
+    /**
+     * Update loan balance after payroll deduction
+     */
+    private void updateLoanBalanceAfterPayroll(Connection conn, int employeeId, double totalLoanDeduction) throws SQLException {
+        if (totalLoanDeduction <= 0) {
+            return; // No loan deduction, nothing to update
+        }
         
-        // Late and absent deductions
-        double lateDeduction = (calc.totalLateMinutes / 60.0) * hourlyRate;
-        double absentDeduction = calc.absentDays * dailyRate;
-        calc.totalDeductions += lateDeduction + absentDeduction;
+        // Get all active loans
+        String sql = """
+            SELECT el.id, el.monthly_amortization, el.balance
+            FROM employee_loans el
+            WHERE el.employee_id = ? 
+            AND el.status = 'Active' 
+            AND el.balance > 0
+            ORDER BY el.id
+            """;
         
-        // Calculate net pay
-        calc.netPay = calc.basicPay + calc.overtimePay + calc.allowances - calc.totalDeductions;
-        
-        return calc;
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, employeeId);
+            ResultSet rs = stmt.executeQuery();
+            
+            double remainingDeduction = totalLoanDeduction;
+            
+            while (rs.next() && remainingDeduction > 0) {
+                int loanId = rs.getInt("id");
+                double amortization = rs.getDouble("monthly_amortization");
+                double currentBalance = rs.getDouble("balance");
+                
+                // Calculate deduction for this loan
+                double loanDeduction = Math.min(amortization, Math.min(currentBalance, remainingDeduction));
+                
+                if (loanDeduction > 0) {
+                    // Update balance
+                    double newBalance = Math.max(0, currentBalance - loanDeduction);
+                    String updateSQL = """
+                        UPDATE employee_loans 
+                        SET balance = ?, 
+                            status = CASE WHEN ? <= 0 THEN 'Completed' ELSE status END,
+                            end_date = CASE WHEN ? <= 0 THEN CURDATE() ELSE end_date END
+                        WHERE id = ?
+                        """;
+                    
+                    try (PreparedStatement updateStmt = conn.prepareStatement(updateSQL)) {
+                        updateStmt.setDouble(1, newBalance);
+                        updateStmt.setDouble(2, newBalance);
+                        updateStmt.setDouble(3, newBalance);
+                        updateStmt.setInt(4, loanId);
+                        updateStmt.executeUpdate();
+                    }
+                    
+                    remainingDeduction -= loanDeduction;
+                }
+            }
+        }
     }
     
     private static class PayrollCalculation {
@@ -631,107 +904,136 @@ public class PayrollProcessingController implements Initializable {
 
     @FXML
     private void onSearch(ActionEvent event) {
+        // Log search activity
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        String searchText = searchField.getText() != null ? searchField.getText().trim() : "";
+        String monthFilterValue = monthFilter.getValue() != null ? monthFilter.getValue() : "";
+        String yearFilterValue = yearFilter.getValue() != null ? yearFilter.getValue() : "";
+        
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "PAYROLL_PROCESSING_SEARCH",
+                "LOW",
+                currentUser,
+                "Searched payroll records - Keyword: '" + (searchText.isEmpty() ? "(none)" : searchText) + 
+                "', Month: " + monthFilterValue + ", Year: " + yearFilterValue
+            );
+        }
+        
         filterPayrollData();
     }
 
     private void calculateIndividualDeductions(PayrollProcessEntry entry) {
         try (Connection conn = getConnection()) {
-            double basicSalary = entry.getBasicSalary();
+            double monthlySalary = entry.getBasicSalary();
             
-            // Determine employee type based on position
-            String employeeTypeSQL = """
-                SELECT position FROM employees WHERE id = ?
+            // Get employee employment type and assigned units
+            String employeeInfoSQL = """
+                SELECT employment_type, assigned_units 
+                FROM employees 
+                WHERE id = ?
                 """;
             
-            boolean isContractor = false;
-            try (PreparedStatement typeStmt = conn.prepareStatement(employeeTypeSQL)) {
-                typeStmt.setInt(1, entry.getEmployeeId());
-                ResultSet typeRs = typeStmt.executeQuery();
-                if (typeRs.next()) {
-                    String position = typeRs.getString("position");
-                    isContractor = position != null && 
-                                  (position.toLowerCase().contains("instructor") || 
-                                   position.toLowerCase().contains("contractor"));
-                }
-            }
-            
-            // Apply different deductions based on employee type
-            String deductionTypesSQL;
-            if (isContractor) {
-                // For contractors/instructors: EVAT 5% + Expanded 3%
-                deductionTypesSQL = """
-                    SELECT name, fixed_amount, percentage 
-                    FROM deduction_types 
-                    WHERE name IN ('GVAT', 'Expanded Tax')
-                    """;
-            } else {
-                // For regular employees: standard government deductions
-                deductionTypesSQL = """
-                    SELECT name, fixed_amount, percentage 
-                    FROM deduction_types 
-                    WHERE name IN ('PhilHealth', 'Withholding Tax', 'Pag-ibig', 'SSS')
-                    """;
-            }
-            
-            try (PreparedStatement stmt = conn.prepareStatement(deductionTypesSQL)) {
+            String employmentType = null;
+            Integer assignedUnits = null;
+            try (PreparedStatement stmt = conn.prepareStatement(employeeInfoSQL)) {
+                stmt.setInt(1, entry.getEmployeeId());
                 ResultSet rs = stmt.executeQuery();
-                while (rs.next()) {
-                    String deductionName = rs.getString("name");
-                    Double fixedAmount = rs.getDouble("fixed_amount");
-                    Double percentage = rs.getDouble("percentage");
-                    
-                    double deductionAmount = 0;
-                    if (fixedAmount != null && fixedAmount > 0) {
-                        deductionAmount = fixedAmount;
-                    } else if (percentage != null && percentage > 0) {
-                        deductionAmount = (basicSalary * percentage / 100);
+                if (rs.next()) {
+                    employmentType = rs.getString("employment_type");
+                    if (rs.wasNull()) {
+                        employmentType = null;
                     }
-                    
-                    if (isContractor) {
-                        // For contractors: EVAT and Expanded Tax go to withholding tax
-                        switch (deductionName.toLowerCase()) {
-                            case "gvat" -> {
-                                // EVAT 5% - treat as withholding tax for display
-                                entry.setWithholdingTax(entry.getWithholdingTax() + deductionAmount);
-                            }
-                            case "expanded tax" -> {
-                                // Expanded 3% - add to withholding tax
-                                entry.setWithholdingTax(entry.getWithholdingTax() + deductionAmount);
-                            }
-                        }
-                    } else {
-                        // For regular employees: standard deductions
-                        switch (deductionName.toLowerCase()) {
-                            case "philhealth" -> entry.setPhilhealthDeduction(deductionAmount);
-                            case "withholding tax" -> entry.setWithholdingTax(deductionAmount);
-                            case "pag-ibig" -> entry.setPagibigDeduction(deductionAmount);
-                            case "sss" -> entry.setSssDeduction(deductionAmount);
-                        }
+                    assignedUnits = rs.getInt("assigned_units");
+                    if (rs.wasNull()) {
+                        assignedUnits = null;
                     }
                 }
             }
             
-            // Calculate late deduction
-            double hourlyRate = basicSalary / (22 * 8); // 22 working days, 8 hours per day
-            double lateMinutes = entry.getTotalLateMinutes();
-            double lateDeduction = (lateMinutes / 60.0) * hourlyRate;
-            entry.setLateDeduction(lateDeduction);
+            // Determine if employee is instructor
+            boolean isInstructor = employmentType != null && 
+                                  (employmentType.equals("INSTRUCTOR") || employmentType.equals("TEMPORARY_INSTRUCTOR"));
             
-            // Calculate absent deduction
-            double dailyRate = basicSalary / 22;
-            double absentDeduction = entry.getAbsentDays() * dailyRate;
-            entry.setAbsentDeduction(absentDeduction);
+            // =====================================================
+            // LGU PAYROLL CALCULATION FORMULA
+            // =====================================================
             
-            // Calculate gross pay
-            double grossPay = entry.getBasicPay() + entry.getOvertimePay() + entry.getAllowances();
-            entry.setGrossPay(grossPay);
+            // 1. GROSS REGULAR (Half-month salary)
+            double grossRegular = monthlySalary / 2.0;
             
-            // Calculate other deductions (total - known deductions)
-            double knownDeductions = entry.getPhilhealthDeduction() + entry.getWithholdingTax() + 
-                                   entry.getPagibigDeduction() + entry.getSssDeduction() + 
-                                   entry.getLateDeduction() + entry.getAbsentDeduction();
-            double otherDeductions = Math.max(0, entry.getTotalDeductions() - knownDeductions);
-            entry.setOtherDeductions(otherDeductions);
+            // 2. OVERLOAD COMPUTATION (Instructors only)
+            double overloadAmount = 0.0;
+            if (isInstructor && assignedUnits != null && assignedUnits > 0) {
+                double ratePerUnit = monthlySalary / 24.0;
+                overloadAmount = assignedUnits * ratePerUnit;
+            }
+            
+            // 3. GROSS TOTAL
+            double grossTotal = grossRegular + overloadAmount;
+            
+            // 4. ATTENDANCE DEDUCTIONS (LGU Formula)
+            double dailyRate = monthlySalary / 22.0;
+            double hourlyRate = dailyRate / 8.0;
+            double minuteRate = hourlyRate / 60.0;
+            
+            // Get half days from processed_attendance
+            int totalHalfDays = 0;
+            String halfDaysSQL = """
+                SELECT SUM(half_days) as total_half_days
+                FROM processed_attendance 
+                WHERE employee_id = ? 
+                AND process_date BETWEEN ? AND ?
+                """;
+            try (PreparedStatement stmt = conn.prepareStatement(halfDaysSQL)) {
+                stmt.setInt(1, entry.getEmployeeId());
+                stmt.setDate(2, Date.valueOf(LocalDate.parse(entry.getPayPeriodStart())));
+                stmt.setDate(3, Date.valueOf(LocalDate.parse(entry.getPayPeriodEnd())));
+                ResultSet rs = stmt.executeQuery();
+                if (rs.next()) {
+                    totalHalfDays = rs.getInt("total_half_days");
+                }
+            }
+            
+            // Tardiness deduction
+            double tardinessDeduction = minuteRate * entry.getTotalLateMinutes();
+            entry.setLateDeduction(tardinessDeduction);
+            
+            // Absence deduction (full days + half days)
+            double absenceDeduction = (entry.getAbsentDays() * dailyRate) + (totalHalfDays * (dailyRate / 2.0));
+            entry.setAbsentDeduction(absenceDeduction);
+            
+            // 5. GROSS EARNED
+            double grossEarned = grossTotal - tardinessDeduction - absenceDeduction;
+            entry.setGrossPay(grossEarned);
+            
+            // 6. DEDUCTIONS (LGU Formula)
+            // 6.1 PAG-IBIG Premium (Fixed ₱200.00)
+            entry.setPagibigDeduction(200.0);
+            
+            // 6.2 All Active Loans
+            double totalLoanDeduction = getAllLoanDeductions(conn, entry.getEmployeeId());
+            
+            // 6.3 Tax Deductions (Only if gross_earned >= 20,000)
+            double expandedTax = 0.0;
+            double gvat = 0.0;
+            if (grossEarned >= 20000.0) {
+                // 6.4 Expanded Tax (5% of gross_earned)
+                expandedTax = grossEarned * 0.05;
+                
+                // 6.5 GVAT (3% of gross_earned)
+                gvat = grossEarned * 0.03;
+            }
+            
+            // Set withholding tax as sum of Expanded Tax and GVAT for display
+            entry.setWithholdingTax(expandedTax + gvat);
+            
+            // Set other deductions (all loans)
+            entry.setOtherDeductions(totalLoanDeduction);
+            
+            // Clear unused deductions
+            entry.setSssDeduction(0.0);
+            entry.setPhilhealthDeduction(0.0);
             
         } catch (SQLException e) {
             System.err.println("Error calculating individual deductions: " + e.getMessage());
@@ -743,80 +1045,500 @@ public class PayrollProcessingController implements Initializable {
         PayrollProcessEntry selectedEntry = payrollTable.getSelectionModel().getSelectedItem();
         if (selectedEntry == null) {
             showErrorAlert("No Selection", "Please select a payroll entry to view computation details.");
+            
+            // Log failed view attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "PAYROLL_VIEW_COMPUTATION_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Attempted to view payroll computation but no entry was selected"
+                );
+            }
             return;
         }
+        
+        // Log view computation click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "PAYROLL_VIEW_COMPUTATION",
+                "MEDIUM",
+                currentUser,
+                "Viewed payroll computation details for: " + selectedEntry.getEmployeeName() + 
+                " (ID: " + selectedEntry.getEmployeeId() + ", Period: " + 
+                selectedEntry.getPayPeriodStart() + " to " + selectedEntry.getPayPeriodEnd() + ")"
+            );
+        }
+        
         showComputationDetails(selectedEntry);
     }
 
     private void showComputationDetails(PayrollProcessEntry entry) {
-        StringBuilder details = new StringBuilder();
-        details.append("PAYROLL COMPUTATION DETAILS\n");
-        details.append("=====================================\n\n");
-        details.append(String.format("Employee: %s (%s)\n", entry.getEmployeeName(), entry.getAccountNumber()));
-        details.append(String.format("Position: %s\n", entry.getPosition()));
-        details.append(String.format("Period: %s to %s\n\n", entry.getPayPeriodStart(), entry.getPayPeriodEnd()));
+        try (Connection conn = getConnection()) {
+            // Get company information - Always use Talibon Polytechnic College
+            String companyName = "Talibon Polytechnic College";
+            
+            // Get employee details including employment type and assigned units
+            String employmentType = "";
+            Integer assignedUnits = null;
+            try (PreparedStatement stmt = conn.prepareStatement(
+                "SELECT employment_type, assigned_units FROM employees WHERE id = ?")) {
+                stmt.setInt(1, entry.getEmployeeId());
+                ResultSet rs = stmt.executeQuery();
+                if (rs.next()) {
+                    employmentType = rs.getString("employment_type");
+                    assignedUnits = rs.getInt("assigned_units");
+                    if (rs.wasNull()) assignedUnits = null;
+                }
+            }
+            
+            // Get all loan deductions
+            double totalLoanDeduction = getAllLoanDeductions(conn, entry.getEmployeeId());
+            
+            // Get individual loan amounts for display (MPL and Calamity)
+            double mplLoan = getLoanAmount(conn, entry.getEmployeeId(), "MPL Loan");
+            double calamityLoan = getLoanAmount(conn, entry.getEmployeeId(), "Calamity Loan");
+            
+            // Get other loans (not MPL or Calamity)
+            double otherLoans = totalLoanDeduction - mplLoan - calamityLoan;
+            
+            // Recalculate using LGU formula to ensure accuracy
+            double monthlySalary = entry.getBasicSalary();
+            
+            // Determine period type from entry dates
+            LocalDate startDate = LocalDate.parse(entry.getPayPeriodStart());
+            LocalDate endDate = LocalDate.parse(entry.getPayPeriodEnd());
+            int startDay = startDate.getDayOfMonth();
+            int endDay = endDate.getDayOfMonth();
+            int daysInPeriod = (int) java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate) + 1;
+            
+            // 1. GROSS REGULAR - Depende sa period
+            double grossRegular;
+            // If period is 1-15 or 16-30/31 (half month) = monthly_salary / 2
+            // If period is 1-30/31 (full month) = monthly_salary
+            if ((startDay == 1 && endDay == 15) || (startDay == 16 && endDay >= 28 && endDay <= 31)) {
+                // Half month period
+                grossRegular = monthlySalary / 2.0;
+            } else if (startDay == 1 && (endDay == 30 || endDay == 31)) {
+                // Full month period
+                grossRegular = monthlySalary;
+            } else {
+                // Prorated based on number of days
+                int workingDaysInPeriod = daysInPeriod; // Simplified
+                int workingDaysInMonth = 22; // Standard working days
+                grossRegular = (monthlySalary / workingDaysInMonth) * workingDaysInPeriod;
+            }
+            
+            // 2. OVERLOAD (if instructor with units)
+            double overloadAmount = 0.0;
+            if (assignedUnits != null && assignedUnits > 0 && 
+                (employmentType != null && (employmentType.equals("INSTRUCTOR") || employmentType.equals("TEMPORARY_INSTRUCTOR")))) {
+                double ratePerUnit = monthlySalary / 24.0;
+                double monthlyOverload = assignedUnits * ratePerUnit;
+                
+                // Prorate overload based on period (same logic as grossRegular)
+                if ((startDay == 1 && endDay == 15) || (startDay == 16 && endDay >= 28 && endDay <= 31)) {
+                    // Half month period
+                    overloadAmount = monthlyOverload / 2.0;
+                } else if (startDay == 1 && (endDay == 30 || endDay == 31)) {
+                    // Full month period
+                    overloadAmount = monthlyOverload;
+                } else {
+                    // Prorated based on number of days
+                    int workingDaysInPeriod = daysInPeriod;
+                    int workingDaysInMonth = 22;
+                    overloadAmount = (monthlyOverload / workingDaysInMonth) * workingDaysInPeriod;
+                }
+            }
+            
+            // 3. GROSS TOTAL
+            double grossTotal = grossRegular + overloadAmount;
+            
+            // 4. Calculate time deductions to get grossEarned
+            double dailyRate = monthlySalary / 22.0;
+            double hourlyRate = dailyRate / 8.0;
+            double minuteRate = hourlyRate / 60.0;
+            
+            // Get half days from processed_attendance
+            int totalHalfDays = 0;
+            String halfDaysSQL = """
+                SELECT SUM(half_days) as total_half_days
+                FROM processed_attendance 
+                WHERE employee_id = ? 
+                AND process_date BETWEEN ? AND ?
+                """;
+            try (PreparedStatement stmt = conn.prepareStatement(halfDaysSQL)) {
+                stmt.setInt(1, entry.getEmployeeId());
+                stmt.setDate(2, Date.valueOf(startDate));
+                stmt.setDate(3, Date.valueOf(endDate));
+                ResultSet rs = stmt.executeQuery();
+                if (rs.next()) {
+                    totalHalfDays = rs.getInt("total_half_days");
+                }
+            }
+            
+            // Tardiness deduction
+            double tardinessDeduction = minuteRate * entry.getTotalLateMinutes();
+            
+            // Absence deduction (full days + half days)
+            double absenceDeduction = (entry.getAbsentDays() * dailyRate) + (totalHalfDays * (dailyRate / 2.0));
+            
+            // 5. GROSS EARNED (after time deductions)
+            double grossEarned = grossTotal - tardinessDeduction - absenceDeduction;
+            
+            // Calculate deductions based on grossEarned
+            double pagibigPremium = 200.0; // Fixed per month, not prorated
+            
+            // Tax Deductions (Only if gross_earned >= 20,000)
+            double expandedTax = 0.0;
+            double gvat = 0.0;
+            if (grossEarned >= 20000.0) {
+                expandedTax = grossEarned * 0.05;
+                gvat = grossEarned * 0.03;
+            }
+            
+            // Create payroll slip window
+            Stage payrollStage = new Stage();
+            payrollStage.setTitle("Pay Advice - " + entry.getEmployeeName());
+            payrollStage.initModality(Modality.WINDOW_MODAL);
+            payrollStage.initOwner(payrollTable.getScene().getWindow());
+            
+            VBox root = new VBox(15);
+            root.setPadding(new Insets(30, 40, 30, 40));
+            root.setStyle("-fx-background-color: white;");
+            
+            // Header - Company Name
+            Label companyLabel = new Label(companyName);
+            companyLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+            companyLabel.setAlignment(Pos.CENTER);
+            HBox headerBox = new HBox(companyLabel);
+            headerBox.setAlignment(Pos.CENTER);
+            root.getChildren().add(headerBox);
+            
+            // Employee Information Grid
+            GridPane infoGrid = new GridPane();
+            infoGrid.setHgap(15);
+            infoGrid.setVgap(8);
+            infoGrid.setPadding(new Insets(20, 0, 20, 0));
+            
+            int row = 0;
+            infoGrid.add(createBoldLabel("Code:"), 0, row);
+            infoGrid.add(new Label(entry.getAccountNumber()), 1, row);
+            infoGrid.add(createBoldLabel("Name:"), 2, row);
+            infoGrid.add(new Label(entry.getEmployeeName().toUpperCase()), 3, row);
+            
+            row++;
+            infoGrid.add(createBoldLabel("Position:"), 0, row);
+            infoGrid.add(new Label(entry.getPosition()), 1, row);
+            infoGrid.add(createBoldLabel("Employment Type:"), 2, row);
+            String empTypeDisplay = employmentType != null ? employmentType.replace("_", " ") : "Regular";
+            infoGrid.add(new Label(empTypeDisplay), 3, row);
+            
+            row++;
+            infoGrid.add(createBoldLabel("Timesheet Period:"), 0, row);
+            infoGrid.add(new Label(entry.getPayPeriodStart() + " - " + entry.getPayPeriodEnd()), 1, row);
+            
+            if (assignedUnits != null && assignedUnits > 0) {
+                row++;
+                infoGrid.add(createBoldLabel("Assigned Units:"), 0, row);
+                infoGrid.add(new Label(String.valueOf(assignedUnits)), 1, row);
+            }
+            
+            root.getChildren().add(infoGrid);
+            
+            // Separator
+            root.getChildren().add(createSeparator());
+            
+            // Earnings Section
+            VBox earningsBox = new VBox(5);
+            Label earningsTitle = new Label("EARNINGS");
+            earningsTitle.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+            earningsBox.getChildren().add(earningsTitle);
+            
+            // Use recalculated grossRegular instead of entry.getBasicPay()
+            HBox regBasicRow = createDataRow("REG BASIC", grossRegular);
+            earningsBox.getChildren().add(regBasicRow);
+            
+            if (overloadAmount > 0) {
+                HBox overloadRow = createDataRow("OVERLOAD", overloadAmount);
+                earningsBox.getChildren().add(overloadRow);
+            }
+            
+            // Total Earnings should be grossTotal (before deductions)
+            HBox totalEarningsRow = createDataRow("Total Earnings", grossTotal, true);
+            earningsBox.getChildren().add(totalEarningsRow);
+            
+            root.getChildren().add(earningsBox);
+            
+            // Separator
+            root.getChildren().add(createSeparator());
+            
+            // Deductions Section
+            VBox deductionsBox = new VBox(5);
+            Label deductionsTitle = new Label("DEDUCTIONS");
+            deductionsTitle.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+            deductionsBox.getChildren().add(deductionsTitle);
+            
+            deductionsBox.getChildren().add(createDataRow("PAG-IBIG", pagibigPremium));
+            
+            // Only show tax deductions if grossEarned >= 20,000
+            if (grossEarned >= 20000.0) {
+                deductionsBox.getChildren().add(createDataRow("EXPANDED TAX (5%)", expandedTax));
+                deductionsBox.getChildren().add(createDataRow("GVAT (3%)", gvat));
+            }
+            
+            if (mplLoan > 0) {
+                deductionsBox.getChildren().add(createDataRow("MPL LOAN", mplLoan));
+            }
+            if (calamityLoan > 0) {
+                deductionsBox.getChildren().add(createDataRow("CALAMITY LOAN", calamityLoan));
+            }
+            if (otherLoans > 0) {
+                deductionsBox.getChildren().add(createDataRow("OTHER LOANS", otherLoans));
+            }
+            if (tardinessDeduction > 0) {
+                deductionsBox.getChildren().add(createDataRow("LATE DEDUCTION", tardinessDeduction));
+            }
+            if (absenceDeduction > 0) {
+                deductionsBox.getChildren().add(createDataRow("ABSENT DEDUCTION", absenceDeduction));
+            }
+            
+            // Recalculate total deductions (use totalLoanDeduction instead of individual loans)
+            double totalDeductions = pagibigPremium + expandedTax + gvat + totalLoanDeduction + 
+                                    tardinessDeduction + absenceDeduction;
+            HBox totalDeductionsRow = createDataRow("Total Deductions", totalDeductions, true);
+            deductionsBox.getChildren().add(totalDeductionsRow);
+            
+            root.getChildren().add(deductionsBox);
+            
+            // Separator
+            root.getChildren().add(createSeparator());
+            
+            // Loan Balances Section
+            VBox loanBox = new VBox(5);
+            Label loanTitle = new Label("LOAN BALANCES");
+            loanTitle.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+            loanBox.getChildren().add(loanTitle);
+            
+            // Get all loan balances from database
+            double mplBalance = getLoanBalance(conn, entry.getEmployeeId(), "MPL Loan");
+            double calamityBalance = getLoanBalance(conn, entry.getEmployeeId(), "Calamity Loan");
+            
+            // Get total of all loan balances
+            double totalLoanBalance = getAllLoanBalances(conn, entry.getEmployeeId());
+            double totalPaidThisPeriod = totalLoanDeduction;
+            
+            loanBox.getChildren().add(createDataRow("Principal", totalLoanBalance));
+            loanBox.getChildren().add(createDataRow("Total Paid", totalPaidThisPeriod));
+            double remainingBalance = Math.max(0, totalLoanBalance - totalPaidThisPeriod);
+            loanBox.getChildren().add(createDataRow("Balance", remainingBalance, true));
+            
+            root.getChildren().add(loanBox);
+            
+            // Separator
+            root.getChildren().add(createSeparator());
+            
+            // Net Pay Section - Recalculate based on grossEarned and totalDeductions
+            double netPay = grossEarned - totalDeductions;
+            HBox netPayBox = new HBox(10);
+            netPayBox.setAlignment(Pos.CENTER_RIGHT);
+            Label netPayLabel = new Label("NET PAY");
+            netPayLabel.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+            Label netPayValue = new Label(String.format("₱%.2f", netPay));
+            netPayValue.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+            netPayValue.setStyle("-fx-text-fill: #1b5e20;");
+            netPayBox.getChildren().addAll(netPayLabel, netPayValue);
+            root.getChildren().add(netPayBox);
+            
+            // Buttons
+            HBox buttonBox = new HBox(10);
+            buttonBox.setAlignment(Pos.CENTER);
+            buttonBox.setPadding(new Insets(20, 0, 0, 0));
+            
+            Button printButton = new Button("Print");
+            printButton.setStyle("-fx-background-color: #2e7d32; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 20;");
+            printButton.setOnAction(e -> printPayrollSlip(root, payrollStage));
+            
+            Button closeButton = new Button("Close");
+            closeButton.setStyle("-fx-background-color: #757575; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 20;");
+            closeButton.setOnAction(e -> payrollStage.close());
+            
+            buttonBox.getChildren().addAll(printButton, closeButton);
+            root.getChildren().add(buttonBox);
+            
+            Scene scene = new Scene(root, 700, 800);
+            payrollStage.setScene(scene);
+            payrollStage.setResizable(true);
+            payrollStage.show();
+            
+        } catch (SQLException e) {
+            showErrorAlert("Database Error", "Failed to load payroll details: " + e.getMessage());
+        }
+    }
+    
+    private Label createBoldLabel(String text) {
+        Label label = new Label(text);
+        label.setFont(Font.font("Arial", FontWeight.BOLD, 11));
+        return label;
+    }
+    
+    private HBox createSeparator() {
+        HBox separator = new HBox();
+        separator.setPrefHeight(1);
+        separator.setStyle("-fx-background-color: #000000;");
+        return separator;
+    }
+    
+    private HBox createDataRow(String label, double value) {
+        return createDataRow(label, value, false);
+    }
+    
+    private HBox createDataRow(String label, double value, boolean underline) {
+        HBox row = new HBox(10);
+        Label labelLbl = new Label(label + ":");
+        labelLbl.setPrefWidth(200);
+        Label valueLbl = new Label(String.format("₱%.2f", value));
+        valueLbl.setPrefWidth(150);
+        valueLbl.setAlignment(Pos.CENTER_RIGHT);
+        if (underline) {
+            valueLbl.setFont(Font.font("Arial", FontWeight.BOLD, 11));
+            valueLbl.setStyle("-fx-underline: true;");
+        }
+        row.getChildren().addAll(labelLbl, valueLbl);
+        return row;
+    }
+    
+    private double getLoanBalance(Connection conn, int employeeId, String loanTypeName) throws SQLException {
+        String sql = """
+            SELECT el.balance
+            FROM employee_loans el
+            JOIN loan_types lt ON el.loan_type_id = lt.id
+            WHERE el.employee_id = ? 
+            AND lt.name = ?
+            AND el.status = 'Active' 
+            AND el.balance > 0
+            LIMIT 1
+            """;
         
-        // Determine employee type
-        boolean isContractor = entry.getPosition() != null && 
-                              (entry.getPosition().toLowerCase().contains("instructor") || 
-                               entry.getPosition().toLowerCase().contains("contractor"));
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, employeeId);
+            stmt.setString(2, loanTypeName);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return rs.getDouble("balance");
+            }
+        }
+        return 0.0;
+    }
+    
+    /**
+     * Get total balance of all active loans for an employee
+     */
+    private double getAllLoanBalances(Connection conn, int employeeId) throws SQLException {
+        String sql = """
+            SELECT SUM(el.balance) as total_balance
+            FROM employee_loans el
+            WHERE el.employee_id = ? 
+            AND el.status = 'Active' 
+            AND el.balance > 0
+            """;
         
-        details.append("ATTENDANCE SUMMARY:\n");
-        details.append(String.format("• Total Work Days: %d\n", entry.getTotalWorkDays()));
-        details.append(String.format("• Present Days: %d\n", entry.getPresentDays()));
-        details.append(String.format("• Absent Days: %d\n", entry.getAbsentDays()));
-        details.append(String.format("• Late Occurrences: %d\n", entry.getLateOccurrences()));
-        details.append(String.format("• Total Late Minutes: %d\n\n", entry.getTotalLateMinutes()));
-        
-        details.append("EARNINGS:\n");
-        details.append(String.format("• Basic Salary: ₱%.2f\n", entry.getBasicSalary()));
-        details.append(String.format("• Basic Pay (Prorated): ₱%.2f\n", entry.getBasicPay()));
-        details.append(String.format("• Overtime Pay: ₱%.2f\n", entry.getOvertimePay()));
-        details.append(String.format("• Allowances: ₱%.2f\n", entry.getAllowances()));
-        details.append(String.format("• Gross Pay: ₱%.2f\n\n", entry.getGrossPay()));
-        
-        details.append("DEDUCTIONS:\n");
-        
-        if (isContractor) {
-            // For contractors/instructors: show withholding taxes
-            details.append(String.format("• Withholding Tax (EVAT 5%% + Expanded 3%%): ₱%.2f\n", entry.getWithholdingTax()));
-            details.append("  - EVAT 5%% (VAT Withholding Tax)\n");
-            details.append("  - Expanded 3%% (Income Tax Withholding)\n");
-        } else {
-            // For regular employees: show standard government deductions
-            details.append(String.format("• SSS: ₱%.2f\n", entry.getSssDeduction()));
-            details.append(String.format("• PhilHealth: ₱%.2f\n", entry.getPhilhealthDeduction()));
-            details.append(String.format("• Pag-IBIG: ₱%.2f\n", entry.getPagibigDeduction()));
-            details.append(String.format("• Withholding Tax: ₱%.2f\n", entry.getWithholdingTax()));
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, employeeId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                double total = rs.getDouble("total_balance");
+                return rs.wasNull() ? 0.0 : total;
+            }
+        }
+        return 0.0;
+    }
+    
+    private void printPayrollSlip(VBox content, Stage stage) {
+        // Log print attempt
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "PAYROLL_PRINT_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Attempted to print payroll slip"
+            );
         }
         
-        details.append(String.format("• Late Deduction: ₱%.2f\n", entry.getLateDeduction()));
-        details.append(String.format("• Absent Deduction: ₱%.2f\n", entry.getAbsentDeduction()));
-        details.append(String.format("• Other Deductions: ₱%.2f\n", entry.getOtherDeductions()));
-        details.append(String.format("• Total Deductions: ₱%.2f\n\n", entry.getTotalDeductions()));
-        
-        details.append(String.format("NET PAY: ₱%.2f\n", entry.getNetPay()));
-        
-        // Add employee type information
-        details.append("\n=====================================\n");
-        if (isContractor) {
-            details.append("Employee Type: CONTRACTOR/INSTRUCTOR\n");
-            details.append("Tax Scheme: EVAT 5% + Expanded 3% = 8% Total Withholding\n");
+        PrinterJob job = PrinterJob.createPrinterJob();
+        if (job != null) {
+            boolean showDialog = job.showPrintDialog(stage.getOwner());
+            if (showDialog) {
+                boolean success = job.printPage(content);
+                if (success) {
+                    job.endJob();
+                    
+                    // Log successful print
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "PAYROLL_PRINT_SUCCESS",
+                            "MEDIUM",
+                            currentUser,
+                            "Successfully printed payroll slip"
+                        );
+                    }
+                    
+                    showInfoAlert("Print", "Payroll slip printed successfully!");
+                } else {
+                    // Log failed print
+                    if (currentUser != null) {
+                        SecurityLogger.logSecurityEvent(
+                            "PAYROLL_PRINT_FAILED",
+                            "MEDIUM",
+                            currentUser,
+                            "Failed to print payroll slip"
+                        );
+                    }
+                    
+                    showErrorAlert("Print Error", "Failed to print payroll slip.");
+                }
+            } else {
+                // Log print cancellation
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "PAYROLL_PRINT_CANCELLED",
+                        "LOW",
+                        currentUser,
+                        "Cancelled printing payroll slip"
+                    );
+                }
+            }
         } else {
-            details.append("Employee Type: REGULAR EMPLOYEE\n");
-            details.append("Deductions: Standard Government Contributions + Withholding Tax\n");
+            // Log no printer available
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "PAYROLL_PRINT_NO_PRINTER",
+                    "LOW",
+                    currentUser,
+                    "Attempted to print but no printer available"
+                );
+            }
+            
+            showErrorAlert("Print Error", "No printer available.");
         }
-        
-        Alert alert = new Alert(AlertType.INFORMATION);
-        alert.setTitle("Payroll Computation Details");
-        alert.setHeaderText(entry.getEmployeeName() + " - Payroll Breakdown");
-        alert.setContentText(details.toString());
-        alert.getDialogPane().setPrefWidth(600);
-        alert.showAndWait();
     }
 
     @FXML
     private void onExportPayroll(ActionEvent event) {
+        // Log export payroll click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "PAYROLL_EXPORT_CLICK",
+                "MEDIUM",
+                currentUser,
+                "Clicked Export Payroll button"
+            );
+        }
+        
         showInfoAlert("Export Feature", "Export payroll functionality will be implemented in future updates.");
     }
 

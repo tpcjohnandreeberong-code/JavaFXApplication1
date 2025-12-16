@@ -21,8 +21,20 @@ import javafx.geometry.Rectangle2D;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.layout.VBox;
+import javafx.scene.layout.HBox;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
+import javafx.scene.chart.BarChart;
+import javafx.scene.chart.CategoryAxis;
+import javafx.scene.chart.NumberAxis;
+import javafx.scene.chart.XYChart;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import javafx.scene.control.DatePicker;
 
 /**
  * FXML Controller class
@@ -45,11 +57,23 @@ public class MainController implements Initializable {
             defaultDashboardContent = contentScroll.getContent();
         }
         
+        // Initialize database connection
+        initializeDatabase();
+        
         // Set the current user's name in the menu button
         updateUserMenuButton();
         
         // Setup permission-based menu visibility
         setupPermissionBasedMenuVisibility();
+        
+        // Load dashboard data
+        loadDashboardData();
+        
+        // Initialize date pickers with default range (last 30 days)
+        if (chartStartDatePicker != null && chartEndDatePicker != null) {
+            chartEndDatePicker.setValue(LocalDate.now());
+            chartStartDatePicker.setValue(LocalDate.now().minusDays(30));
+        }
         
         // Set Dashboard as default active state
         setActiveMenuButton(dashboardBtn);
@@ -71,6 +95,13 @@ public class MainController implements Initializable {
     @FXML private Button userManagementBtn;
     @FXML private Button userAccessBtn;
     @FXML private MenuButton userMenuButton;
+    @FXML private Label totalEmployeesLabel;
+    @FXML private Label payrollProcessedLabel;
+    @FXML private Label averageSalaryLabel;
+    @FXML private VBox recentActivitiesContainer;
+    @FXML private VBox attendanceChartContainer;
+    @FXML private DatePicker chartStartDatePicker;
+    @FXML private DatePicker chartEndDatePicker;
     
     // Active menu button tracking
     private Button currentActiveButton;
@@ -218,6 +249,9 @@ public class MainController implements Initializable {
     @FXML private void openDashboard() { 
         if (defaultDashboardContent != null) contentScroll.setContent(defaultDashboardContent); 
         setActiveMenuButton(dashboardBtn);
+        
+        // Refresh dashboard data when opening dashboard
+        loadDashboardData();
     }
     @FXML private void openEmployeeManagement() { 
         setCenterContent("/javafxapplication1/Employee.fxml"); 
@@ -340,12 +374,253 @@ public class MainController implements Initializable {
     
     private void initializeDatabase() {
         try {
-            Class.forName("com.mysql.cj.jdbc.Driver");
-            connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-            logger.info("Database connection established successfully");
+            if (connection == null || connection.isClosed()) {
+                Class.forName("com.mysql.cj.jdbc.Driver");
+                connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+                logger.info("Database connection established successfully");
+            }
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error initializing database connection", e);
             connection = null;
+        }
+    }
+    
+    private void loadDashboardData() {
+        if (connection == null) {
+            initializeDatabase();
+        }
+        
+        if (connection != null) {
+            loadStatistics();
+            loadRecentActivities();
+            loadAttendanceChart(null, null);
+        }
+    }
+    
+    @FXML
+    private void onFilterChart() {
+        LocalDate startDate = chartStartDatePicker.getValue();
+        LocalDate endDate = chartEndDatePicker.getValue();
+        
+        if (startDate != null && endDate != null) {
+            if (startDate.isAfter(endDate)) {
+                Alert alert = new Alert(AlertType.WARNING);
+                alert.setTitle("Invalid Date Range");
+                alert.setHeaderText(null);
+                alert.setContentText("Start date cannot be after end date.");
+                alert.showAndWait();
+                return;
+            }
+            loadAttendanceChart(startDate, endDate);
+        } else {
+            Alert alert = new Alert(AlertType.WARNING);
+            alert.setTitle("Date Range Required");
+            alert.setHeaderText(null);
+            alert.setContentText("Please select both start and end dates.");
+            alert.showAndWait();
+        }
+    }
+    
+    private void loadStatistics() {
+        try {
+            // Load total employees
+            String employeesQuery = "SELECT COUNT(*) as total FROM employees WHERE status = 'Active'";
+            PreparedStatement stmt = connection.prepareStatement(employeesQuery);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                int totalEmployees = rs.getInt("total");
+                totalEmployeesLabel.setText(String.valueOf(totalEmployees));
+            }
+            
+            // Load payroll processed this month
+            String payrollQuery = """
+                SELECT COUNT(DISTINCT employee_id) as processed 
+                FROM payroll_sheet_items 
+                WHERE MONTH(created_at) = MONTH(CURRENT_DATE()) 
+                AND YEAR(created_at) = YEAR(CURRENT_DATE())
+                """;
+            stmt = connection.prepareStatement(payrollQuery);
+            rs = stmt.executeQuery();
+            if (rs.next()) {
+                int processed = rs.getInt("processed");
+                payrollProcessedLabel.setText(String.valueOf(processed));
+            }
+            
+            // Load average salary
+            String avgSalaryQuery = """
+                SELECT AVG(sr.monthly_salary) as avg_salary 
+                FROM employees e 
+                JOIN salary_reference sr ON e.salary_ref_id = sr.id 
+                WHERE e.status = 'Active'
+                """;
+            stmt = connection.prepareStatement(avgSalaryQuery);
+            rs = stmt.executeQuery();
+            if (rs.next()) {
+                double avgSalary = rs.getDouble("avg_salary");
+                if (!rs.wasNull()) {
+                    averageSalaryLabel.setText(String.format("₱%,.0f", avgSalary));
+                }
+            }
+            
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error loading dashboard statistics", e);
+        }
+    }
+    
+    private void loadRecentActivities() {
+        try {
+            // Clear existing activities
+            if (recentActivitiesContainer != null) {
+                recentActivitiesContainer.getChildren().clear();
+            }
+            
+            // Load 10 latest security events
+            String query = """
+                SELECT event_type, severity, username, description, timestamp 
+                FROM security_events 
+                ORDER BY timestamp DESC 
+                LIMIT 10
+                """;
+            PreparedStatement stmt = connection.prepareStatement(query);
+            ResultSet rs = stmt.executeQuery();
+            
+            while (rs.next()) {
+                String eventType = rs.getString("event_type");
+                String severity = rs.getString("severity");
+                String username = rs.getString("username");
+                String description = rs.getString("description");
+                Timestamp timestamp = rs.getTimestamp("timestamp");
+                
+                // Format timestamp
+                String timeAgo = formatTimeAgo(timestamp.toLocalDateTime());
+                
+                // Determine color based on severity
+                String color = getSeverityColor(severity);
+                
+                // Create activity item
+                HBox activityItem = new HBox(10);
+                activityItem.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+                
+                Label bullet = new Label("•");
+                bullet.setStyle("-fx-text-fill: " + color + "; -fx-font-weight: bold;");
+                
+                Label descLabel = new Label(description);
+                descLabel.setStyle("-fx-text-fill: #333;");
+                
+                Label timeLabel = new Label(timeAgo);
+                timeLabel.setStyle("-fx-text-fill: #666; -fx-font-size: 12px;");
+                
+                activityItem.getChildren().addAll(bullet, descLabel, timeLabel);
+                
+                if (recentActivitiesContainer != null) {
+                    recentActivitiesContainer.getChildren().add(activityItem);
+                }
+            }
+            
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error loading recent activities", e);
+        }
+    }
+    
+    private void loadAttendanceChart(LocalDate startDate, LocalDate endDate) {
+        try {
+            // Clear existing chart
+            if (attendanceChartContainer != null) {
+                attendanceChartContainer.getChildren().clear();
+            }
+            
+            // Use provided date range or default to last 30 days
+            LocalDate actualStartDate = startDate != null ? startDate : LocalDate.now().minusDays(30);
+            LocalDate actualEndDate = endDate != null ? endDate : LocalDate.now();
+            
+            // Load attendance statistics by status
+            String query = """
+                SELECT status, COUNT(*) as count 
+                FROM processed_attendance 
+                WHERE process_date >= ? AND process_date <= ?
+                GROUP BY status
+                """;
+            PreparedStatement stmt = connection.prepareStatement(query);
+            stmt.setDate(1, java.sql.Date.valueOf(actualStartDate));
+            stmt.setDate(2, java.sql.Date.valueOf(actualEndDate));
+            ResultSet rs = stmt.executeQuery();
+            
+            // Create chart data
+            ObservableList<XYChart.Series<String, Number>> chartData = FXCollections.observableArrayList();
+            XYChart.Series<String, Number> series = new XYChart.Series<>();
+            series.setName("Attendance Status (Last 30 Days)");
+            
+            while (rs.next()) {
+                String status = rs.getString("status");
+                int count = rs.getInt("count");
+                series.getData().add(new XYChart.Data<>(status, count));
+            }
+            
+            chartData.add(series);
+            
+            // Create axes
+            CategoryAxis xAxis = new CategoryAxis();
+            xAxis.setLabel("Status");
+            NumberAxis yAxis = new NumberAxis();
+            yAxis.setLabel("Count");
+            
+            // Create bar chart
+            BarChart<String, Number> barChart = new BarChart<>(xAxis, yAxis);
+            barChart.setData(chartData);
+            
+            // Format date range for title
+            String dateRange = actualStartDate.format(DateTimeFormatter.ofPattern("MMM dd, yyyy")) + 
+                              " - " + 
+                              actualEndDate.format(DateTimeFormatter.ofPattern("MMM dd, yyyy"));
+            barChart.setTitle("Attendance Statistics (" + dateRange + ")");
+            barChart.setLegendVisible(true);
+            barChart.setPrefHeight(300);
+            barChart.setPrefWidth(800);
+            
+            // Style the chart
+            barChart.setStyle("-fx-background-color: white;");
+            
+            if (attendanceChartContainer != null) {
+                attendanceChartContainer.getChildren().add(barChart);
+            }
+            
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error loading attendance chart", e);
+        }
+    }
+    
+    private String formatTimeAgo(LocalDateTime dateTime) {
+        LocalDateTime now = LocalDateTime.now();
+        long minutes = ChronoUnit.MINUTES.between(dateTime, now);
+        long hours = ChronoUnit.HOURS.between(dateTime, now);
+        long days = ChronoUnit.DAYS.between(dateTime, now);
+        
+        if (minutes < 1) {
+            return "Just now";
+        } else if (minutes < 60) {
+            return minutes + " minute" + (minutes > 1 ? "s" : "") + " ago";
+        } else if (hours < 24) {
+            return hours + " hour" + (hours > 1 ? "s" : "") + " ago";
+        } else if (days < 7) {
+            return days + " day" + (days > 1 ? "s" : "") + " ago";
+        } else {
+            return dateTime.format(DateTimeFormatter.ofPattern("MMM dd, yyyy"));
+        }
+    }
+    
+    private String getSeverityColor(String severity) {
+        if (severity == null) return "#666";
+        
+        switch (severity.toUpperCase()) {
+            case "CRITICAL":
+            case "HIGH":
+                return "#f44336"; // Red
+            case "MEDIUM":
+                return "#ff9800"; // Orange
+            case "LOW":
+                return "#4caf50"; // Green
+            default:
+                return "#2196f3"; // Blue
         }
     }
     
@@ -355,9 +630,17 @@ public class MainController implements Initializable {
             dashboardBtn.setVisible(true);
             dashboardBtn.setManaged(true);
             
-            // Check each module's view permission
-            boolean employeeView = hasUserPermission(username, "employee.view");
-            boolean payrollView = hasUserPermission(username, "payroll.view");
+            // Check each module's permissions - check if user has ANY permission for the module
+            // Employee module: check for view, add, edit, or delete permissions
+            boolean employeeView = hasUserPermission(username, "employee.view") ||
+                                  hasUserPermission(username, "employee.add") ||
+                                  hasUserPermission(username, "employee.edit") ||
+                                  hasUserPermission(username, "employee.delete");
+            
+            // Payroll Processing module: check for view, generate, or export permissions
+            boolean payrollView = hasUserPermission(username, "payroll.view") ||
+                                 hasUserPermission(username, "payroll.generate") ||
+                                 hasUserPermission(username, "payroll.export");
             boolean payrollGenView = hasUserPermission(username, "payroll_gen.view");
             boolean reportsView = hasUserPermission(username, "reports.view");
             boolean importExportView = hasUserPermission(username, "import_export.view");

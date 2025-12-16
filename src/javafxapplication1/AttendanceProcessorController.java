@@ -23,6 +23,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import javafx.scene.control.Button;
 
 /**
  * Controller for Attendance Processing Engine
@@ -44,6 +45,11 @@ public class AttendanceProcessorController implements Initializable {
     @FXML private TableColumn<AttendanceProcessRecord, String> colHalfDays;
     @FXML private TableColumn<AttendanceProcessRecord, String> colOvertimeHours;
     @FXML private TableColumn<AttendanceProcessRecord, String> colStatus;
+    
+    // Action buttons
+    @FXML private Button processAllButton;
+    @FXML private Button processDateRangeButton;
+    @FXML private Button viewDetailsButton;
     
     private ObservableList<AttendanceProcessRecord> processedData = FXCollections.observableArrayList();
     private Connection connection;
@@ -67,6 +73,121 @@ public class AttendanceProcessorController implements Initializable {
         initializeDatabase();
         setupDatePickers();
         loadProcessedAttendanceData();
+        
+        // Setup permission-based button visibility
+        setupPermissionBasedVisibility();
+        
+        // Log module access
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "ATTENDANCE_PROCESSOR_MODULE_ACCESS",
+                "LOW",
+                currentUser,
+                "Accessed Attendance Processor module"
+            );
+        }
+    }
+    
+    private void setupPermissionBasedVisibility() {
+        try {
+            // Get current user from SessionManager
+            SessionManager sessionManager = SessionManager.getInstance();
+            
+            if (sessionManager.isLoggedIn()) {
+                String currentUser = sessionManager.getCurrentUser();
+                logger.info("Setting up permission-based visibility for user: " + currentUser);
+                
+                // Check user permissions
+                boolean canView = hasUserPermission(currentUser, "attendance_process.view");
+                boolean canEdit = hasUserPermission(currentUser, "attendance_process.edit");
+                boolean canAdd = hasUserPermission(currentUser, "attendance_process.add");
+                
+                // Processing buttons require edit or add permission (they create/modify data)
+                boolean canProcess = canEdit || canAdd;
+                
+                // Show/hide buttons based on permissions
+                if (processAllButton != null) {
+                    processAllButton.setVisible(canProcess);
+                    processAllButton.setManaged(canProcess);
+                }
+                if (processDateRangeButton != null) {
+                    processDateRangeButton.setVisible(canProcess);
+                    processDateRangeButton.setManaged(canProcess);
+                }
+                if (viewDetailsButton != null) {
+                    viewDetailsButton.setVisible(canView);
+                    viewDetailsButton.setManaged(canView);
+                }
+                
+                logger.info("Attendance Processor buttons visibility - View: " + canView + ", Process (Edit/Add): " + canProcess);
+                
+            } else {
+                logger.warning("No user session found, hiding all action buttons");
+                hideAllActionButtons();
+            }
+            
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error setting up permission-based visibility", e);
+            hideAllActionButtons();
+        }
+    }
+    
+    private void hideAllActionButtons() {
+        if (processAllButton != null) {
+            processAllButton.setVisible(false);
+            processAllButton.setManaged(false);
+        }
+        if (processDateRangeButton != null) {
+            processDateRangeButton.setVisible(false);
+            processDateRangeButton.setManaged(false);
+        }
+        if (viewDetailsButton != null) {
+            viewDetailsButton.setVisible(false);
+            viewDetailsButton.setManaged(false);
+        }
+    }
+    
+    private boolean hasUserPermission(String username, String permissionName) {
+        try {
+            if (connection == null || connection.isClosed()) {
+                logger.warning("Database connection not available, defaulting to admin permissions for user: " + username);
+                return username != null && username.equals("admin");
+            }
+            
+            // Get user's role from database
+            String getRoleQuery = "SELECT role FROM users WHERE username = ?";
+            PreparedStatement getRoleStmt = connection.prepareStatement(getRoleQuery);
+            getRoleStmt.setString(1, username);
+            ResultSet roleRs = getRoleStmt.executeQuery();
+            
+            if (roleRs.next()) {
+                String userRole = roleRs.getString("role");
+                
+                // Check if role has the permission
+                String checkPermissionQuery = "SELECT COUNT(*) FROM role_permissions rp " +
+                                           "JOIN roles r ON rp.role_id = r.role_id " +
+                                           "JOIN permissions p ON rp.permission_id = p.permission_id " +
+                                           "WHERE r.role_name = ? AND p.permission_name = ? AND rp.granted = TRUE";
+                PreparedStatement checkPermissionStmt = connection.prepareStatement(checkPermissionQuery);
+                checkPermissionStmt.setString(1, userRole);
+                checkPermissionStmt.setString(2, permissionName);
+                ResultSet permissionRs = checkPermissionStmt.executeQuery();
+                
+                if (permissionRs.next()) {
+                    boolean hasPermission = permissionRs.getInt(1) > 0;
+                    logger.info("User " + username + " (Role: " + userRole + ") has permission " + permissionName + ": " + hasPermission);
+                    return hasPermission;
+                }
+            }
+            
+            return false;
+            
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "Error checking user permission", e);
+            // If database error occurs, default to admin permissions for admin user
+            return username != null && username.equals("admin");
+        }
     }
     
     private void setupTableColumns() {
@@ -140,6 +261,17 @@ public class AttendanceProcessorController implements Initializable {
     
     @FXML
     private void onProcessAll() {
+        // Log process all click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "ATTENDANCE_PROCESSOR_PROCESS_ALL_CLICK",
+                "HIGH",
+                currentUser,
+                "Clicked Process All Attendance button"
+            );
+        }
+        
         Alert confirmAlert = new Alert(AlertType.CONFIRMATION);
         confirmAlert.setTitle("Process All Attendance");
         confirmAlert.setHeaderText("Process All Attendance Records");
@@ -147,8 +279,29 @@ public class AttendanceProcessorController implements Initializable {
         
         confirmAlert.showAndWait().ifPresent(response -> {
             if (response == javafx.scene.control.ButtonType.OK) {
-                processAllAttendance();
+                int processedCount = processAllAttendance();
+                
+                // Log successful processing
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "ATTENDANCE_PROCESSOR_PROCESS_ALL_SUCCESS",
+                        "HIGH",
+                        currentUser,
+                        "Successfully processed all attendance records - Processed " + processedCount + " records"
+                    );
+                }
+                
                 loadProcessedAttendanceData();
+            } else {
+                // Log process all cancelled
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                        "ATTENDANCE_PROCESSOR_PROCESS_ALL_CANCELLED",
+                        "MEDIUM",
+                        currentUser,
+                        "Cancelled processing all attendance records"
+                    );
+                }
             }
         });
     }
@@ -157,19 +310,68 @@ public class AttendanceProcessorController implements Initializable {
     private void onProcessDateRange() {
         if (dateFromPicker.getValue() == null || dateToPicker.getValue() == null) {
             showAlert("Invalid Date Range", "Please select both From and To dates");
+            
+            // Log failed process date range attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "ATTENDANCE_PROCESSOR_PROCESS_DATE_RANGE_FAILED",
+                    "MEDIUM",
+                    currentUser,
+                    "Attempted to process date range but dates were not selected"
+                );
+            }
             return;
         }
         
         if (dateFromPicker.getValue().isAfter(dateToPicker.getValue())) {
             showAlert("Invalid Date Range", "From date cannot be after To date");
+            
+            // Log invalid date range
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "ATTENDANCE_PROCESSOR_PROCESS_DATE_RANGE_FAILED",
+                    "MEDIUM",
+                    currentUser,
+                    "Attempted to process date range but From date (" + dateFromPicker.getValue() + 
+                    ") is after To date (" + dateToPicker.getValue() + ")"
+                );
+            }
             return;
         }
         
-        processAttendanceForDateRange(dateFromPicker.getValue(), dateToPicker.getValue());
+        // Log process date range click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        LocalDate fromDate = dateFromPicker.getValue();
+        LocalDate toDate = dateToPicker.getValue();
+        
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "ATTENDANCE_PROCESSOR_PROCESS_DATE_RANGE_CLICK",
+                "HIGH",
+                currentUser,
+                "Clicked Process Date Range button - From: " + fromDate + ", To: " + toDate
+            );
+        }
+        
+        int processedCount = processAttendanceForDateRange(fromDate, toDate);
+        
+        // Log successful processing
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "ATTENDANCE_PROCESSOR_PROCESS_DATE_RANGE_SUCCESS",
+                "HIGH",
+                currentUser,
+                "Successfully processed attendance for date range - From: " + fromDate + 
+                ", To: " + toDate + ", Processed " + processedCount + " records"
+            );
+        }
+        
         loadProcessedAttendanceData();
     }
     
-    private void processAllAttendance() {
+    private int processAllAttendance() {
         // Get all unprocessed attendance logs
         String selectUnprocessedSQL = """
             SELECT DISTINCT al.account_number, e.id as employee_id, DATE(al.log_datetime) as attendance_date,
@@ -203,13 +405,28 @@ public class AttendanceProcessorController implements Initializable {
             showAlert("Success", "Processed " + processedCount + " attendance records!");
             logger.info("Processed " + processedCount + " attendance records");
             
+            return processedCount;
+            
         } catch (SQLException e) {
             logger.log(Level.SEVERE, "Error processing attendance records", e);
+            
+            // Log processing error
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "ATTENDANCE_PROCESSOR_PROCESS_ALL_FAILED",
+                    "HIGH",
+                    currentUser,
+                    "Failed to process all attendance records - Error: " + e.getMessage()
+                );
+            }
+            
             showAlert("Database Error", "Could not process attendance records: " + e.getMessage());
+            return 0;
         }
     }
     
-    private void processAttendanceForDateRange(LocalDate fromDate, LocalDate toDate) {
+    private int processAttendanceForDateRange(LocalDate fromDate, LocalDate toDate) {
         String selectRangeSQL = """
             SELECT DISTINCT al.account_number, e.id as employee_id, DATE(al.log_datetime) as attendance_date,
                    MIN(al.log_datetime) as time_in,
@@ -245,9 +462,25 @@ public class AttendanceProcessorController implements Initializable {
             showAlert("Success", "Processed " + processedCount + " attendance records for selected date range!");
             logger.info("Processed " + processedCount + " attendance records for date range: " + fromDate + " to " + toDate);
             
+            return processedCount;
+            
         } catch (SQLException e) {
             logger.log(Level.SEVERE, "Error processing attendance for date range", e);
+            
+            // Log processing error
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "ATTENDANCE_PROCESSOR_PROCESS_DATE_RANGE_FAILED",
+                    "HIGH",
+                    currentUser,
+                    "Failed to process attendance for date range - From: " + fromDate + 
+                    ", To: " + toDate + ", Error: " + e.getMessage()
+                );
+            }
+            
             showAlert("Database Error", "Could not process attendance for date range: " + e.getMessage());
+            return 0;
         }
     }
     
@@ -373,7 +606,31 @@ public class AttendanceProcessorController implements Initializable {
         AttendanceProcessRecord selected = table.getSelectionModel().getSelectedItem();
         if (selected == null) {
             showAlert("No Selection", "Please select a processed attendance record to view details");
+            
+            // Log failed view details attempt
+            String currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "ATTENDANCE_PROCESSOR_VIEW_DETAILS_FAILED",
+                    "LOW",
+                    currentUser,
+                    "Attempted to view attendance details but no record was selected"
+                );
+            }
             return;
+        }
+        
+        // Log view details click
+        String currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            SecurityLogger.logSecurityEvent(
+                "ATTENDANCE_PROCESSOR_VIEW_DETAILS",
+                "LOW",
+                currentUser,
+                "Viewed attendance details - Employee: " + selected.getEmployeeName() + 
+                " (ID: " + selected.getEmployeeId() + "), Date: " + selected.getProcessDate() + 
+                ", Status: " + selected.getStatus()
+            );
         }
         
         // Show detailed information

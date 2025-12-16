@@ -11,7 +11,16 @@ public class App extends Application {
 
     @Override
     public void start(Stage stage) throws Exception {
-        FXMLLoader loader = new FXMLLoader(getClass().getResource("/javafxapplication1/Login.fxml"));
+        java.net.URL resource = getClass().getResource("/javafxapplication1/Login.fxml");
+        if (resource == null) {
+            // Try alternative path without leading slash
+            resource = getClass().getResource("Login.fxml");
+        }
+        if (resource == null) {
+            throw new RuntimeException("Cannot find Login.fxml. Please ensure the file exists in the classpath.");
+        }
+        
+        FXMLLoader loader = new FXMLLoader(resource);
         Scene scene = new Scene(loader.load());
 
         stage.setTitle("TPC Payroll Management System - Login");
