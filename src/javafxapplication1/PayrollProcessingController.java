@@ -1,5 +1,6 @@
 package javafxapplication1;
 
+import java.io.File;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.*;
@@ -31,7 +32,14 @@ import java.util.ResourceBundle;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.sql.*;
+import java.util.List;
 import java.util.Optional;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import javafx.stage.FileChooser;
+
+// CSV export imports (no external library needed)
+import java.io.PrintWriter;
 
 public class PayrollProcessingController implements Initializable {
 
@@ -1209,12 +1217,15 @@ public class PayrollProcessingController implements Initializable {
             root.setPadding(new Insets(30, 40, 30, 40));
             root.setStyle("-fx-background-color: white;");
             
-            // Header - Company Name
+            // Header - Company Name (centered for display and print)
             Label companyLabel = new Label(companyName);
             companyLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+            companyLabel.setMaxWidth(Double.MAX_VALUE);
             companyLabel.setAlignment(Pos.CENTER);
+            companyLabel.setStyle("-fx-alignment: center;");
             HBox headerBox = new HBox(companyLabel);
             headerBox.setAlignment(Pos.CENTER);
+            headerBox.setPrefWidth(Double.MAX_VALUE);
             root.getChildren().add(headerBox);
             
             // Employee Information Grid
@@ -1352,14 +1363,15 @@ public class PayrollProcessingController implements Initializable {
             netPayBox.getChildren().addAll(netPayLabel, netPayValue);
             root.getChildren().add(netPayBox);
             
-            // Buttons
+            // Buttons (will be hidden when printing)
             HBox buttonBox = new HBox(10);
             buttonBox.setAlignment(Pos.CENTER);
             buttonBox.setPadding(new Insets(20, 0, 0, 0));
+            buttonBox.setId("buttonBox"); // Add ID for easy reference when printing
             
             Button printButton = new Button("Print");
             printButton.setStyle("-fx-background-color: #2e7d32; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 20;");
-            printButton.setOnAction(e -> printPayrollSlip(root, payrollStage));
+            printButton.setOnAction(e -> printPayrollSlip(root, payrollStage, buttonBox));
             
             Button closeButton = new Button("Close");
             closeButton.setStyle("-fx-background-color: #757575; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 20;");
@@ -1456,7 +1468,7 @@ public class PayrollProcessingController implements Initializable {
         return 0.0;
     }
     
-    private void printPayrollSlip(VBox content, Stage stage) {
+    private void printPayrollSlip(VBox content, Stage stage, HBox buttonBox) {
         // Log print attempt
         String currentUser = SessionManager.getInstance().getCurrentUser();
         if (currentUser != null) {
@@ -1472,7 +1484,16 @@ public class PayrollProcessingController implements Initializable {
         if (job != null) {
             boolean showDialog = job.showPrintDialog(stage.getOwner());
             if (showDialog) {
+                // Hide buttons before printing
+                buttonBox.setVisible(false);
+                buttonBox.setManaged(false);
+                
                 boolean success = job.printPage(content);
+                
+                // Show buttons again after printing
+                buttonBox.setVisible(true);
+                buttonBox.setManaged(true);
+                
                 if (success) {
                     job.endJob();
                     
@@ -1527,19 +1548,77 @@ public class PayrollProcessingController implements Initializable {
     }
 
     @FXML
-    private void onExportPayroll(ActionEvent event) {
-        // Log export payroll click
+    private void onExportPayroll(ActionEvent event) throws SQLException {
         String currentUser = SessionManager.getInstance().getCurrentUser();
         if (currentUser != null) {
             SecurityLogger.logSecurityEvent(
-                "PAYROLL_EXPORT_CLICK",
-                "MEDIUM",
-                currentUser,
-                "Clicked Export Payroll button"
+                    "PAYROLL_EXPORT_CLICK",
+                    "MEDIUM",
+                    currentUser,
+                    "Clicked Export Payroll button"
             );
         }
+
+        // Get payroll data
+        List<PayrollRecord> payrollList = PayrollService.getPayrollRecords();
+
+        // Open a file chooser to save the CSV file (can be opened in Excel)
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save Payroll File");
+        fileChooser.getExtensionFilters().addAll(
+            new FileChooser.ExtensionFilter("CSV Files (Excel Compatible)", "*.csv"),
+            new FileChooser.ExtensionFilter("All Files", "*.*")
+        );
+        File file = fileChooser.showSaveDialog(null);
         
-        showInfoAlert("Export Feature", "Export payroll functionality will be implemented in future updates.");
+        if (file != null) {
+            try (PrintWriter writer = new PrintWriter(file)) {
+                // Write header row
+                writer.println("Employee ID,Employee Name,Position,Basic Salary,Overtime,Allowances,Deductions,Net Pay,Status");
+                
+                // Write payroll data
+                for (PayrollRecord record : payrollList) {
+                    writer.printf("%d,\"%s\",\"%s\",%.2f,%.2f,%.2f,%.2f,%.2f,\"%s\"%n",
+                            record.getEmployeeId(),
+                            record.getEmployeeName(),
+                            record.getPosition(),
+                            record.getBasicSalary(),
+                            record.getOvertime(),
+                            record.getAllowances(),
+                            record.getDeductions(),
+                            record.getNetPay(),
+                            record.getStatus());
+                }
+                
+                // Log successful export
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                            "PAYROLL_EXPORT_SUCCESS",
+                            "MEDIUM",
+                            currentUser,
+                            "Successfully exported " + payrollList.size() + " payroll records to CSV"
+                    );
+                }
+
+                showInfoAlert("Export Successful", "Payroll exported successfully!\n" +
+                        "Records exported: " + payrollList.size() + "\n\n" +
+                        "Note: CSV file can be opened in Microsoft Excel");
+            } catch (IOException e) {
+                e.printStackTrace();
+                
+                // Log failed export
+                if (currentUser != null) {
+                    SecurityLogger.logSecurityEvent(
+                            "PAYROLL_EXPORT_FAILED",
+                            "MEDIUM",
+                            currentUser,
+                            "Failed to export payroll: " + e.getMessage()
+                    );
+                }
+                
+                showErrorAlert("Export Failed", "Error while exporting payroll: " + e.getMessage());
+            }
+        }
     }
 
     private void showInfoAlert(String title, String message) {

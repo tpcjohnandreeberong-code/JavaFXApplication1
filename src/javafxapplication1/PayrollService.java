@@ -322,6 +322,52 @@ public class PayrollService {
         }
         return workingDays;
     }
+    
+    /**
+     * Static method to get all payroll records for export
+     * Returns a list of PayrollRecord objects
+     */
+    public static List<PayrollRecord> getPayrollRecords() throws SQLException {
+        List<PayrollRecord> records = new ArrayList<>();
+        
+        String sql = """
+            SELECT 
+                pp.employee_id,
+                e.full_name as employee_name,
+                e.position,
+                pp.basic_salary,
+                pp.overtime_pay,
+                pp.allowances,
+                pp.total_deductions,
+                pp.net_pay,
+                pp.status
+            FROM payroll_process pp
+            JOIN employees e ON pp.employee_id = e.id
+            ORDER BY e.full_name
+            """;
+        
+        try (Connection conn = DatabaseConfig.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            
+            while (rs.next()) {
+                PayrollRecord record = new PayrollRecord();
+                record.setEmployeeId(rs.getInt("employee_id"));
+                record.setEmployeeName(rs.getString("employee_name"));
+                record.setPosition(rs.getString("position"));
+                record.setBasicSalary(rs.getDouble("basic_salary"));
+                record.setOvertime(rs.getDouble("overtime_pay"));
+                record.setAllowances(rs.getDouble("allowances"));
+                record.setDeductions(rs.getDouble("total_deductions"));
+                record.setNetPay(rs.getDouble("net_pay"));
+                record.setStatus(rs.getString("status"));
+                
+                records.add(record);
+            }
+        }
+        
+        return records;
+    }
 }
 
 // Additional data classes for the service
