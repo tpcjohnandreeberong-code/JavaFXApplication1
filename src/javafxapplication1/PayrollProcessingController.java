@@ -40,6 +40,8 @@ import javafx.stage.FileChooser;
 
 // CSV export imports (no external library needed)
 import java.io.PrintWriter;
+import javafx.print.Paper;
+import javafx.scene.transform.Scale;
 
 public class PayrollProcessingController implements Initializable {
 
@@ -1392,7 +1394,7 @@ public class PayrollProcessingController implements Initializable {
     
     private Label createBoldLabel(String text) {
         Label label = new Label(text);
-        label.setFont(Font.font("Arial", FontWeight.BOLD, 11));
+        label.setFont(Font.font("Arial", FontWeight.BOLD, 14));
         return label;
     }
     
@@ -1415,7 +1417,7 @@ public class PayrollProcessingController implements Initializable {
         valueLbl.setPrefWidth(150);
         valueLbl.setAlignment(Pos.CENTER_RIGHT);
         if (underline) {
-            valueLbl.setFont(Font.font("Arial", FontWeight.BOLD, 11));
+            valueLbl.setFont(Font.font("Arial", FontWeight.BOLD, 14));
             valueLbl.setStyle("-fx-underline: true;");
         }
         row.getChildren().addAll(labelLbl, valueLbl);
@@ -1469,7 +1471,7 @@ public class PayrollProcessingController implements Initializable {
     }
     
     private void printPayrollSlip(VBox content, Stage stage, HBox buttonBox) {
-        // Log print attempt
+       // Log print attempt
         String currentUser = SessionManager.getInstance().getCurrentUser();
         if (currentUser != null) {
             SecurityLogger.logSecurityEvent(
@@ -1479,71 +1481,87 @@ public class PayrollProcessingController implements Initializable {
                 "Attempted to print payroll slip"
             );
         }
-        
+
         PrinterJob job = PrinterJob.createPrinterJob();
-        if (job != null) {
-            boolean showDialog = job.showPrintDialog(stage.getOwner());
-            if (showDialog) {
-                // Hide buttons before printing
-                buttonBox.setVisible(false);
-                buttonBox.setManaged(false);
-                
-                boolean success = job.printPage(content);
-                
-                // Show buttons again after printing
-                buttonBox.setVisible(true);
-                buttonBox.setManaged(true);
-                
-                if (success) {
-                    job.endJob();
-                    
-                    // Log successful print
-                    if (currentUser != null) {
-                        SecurityLogger.logSecurityEvent(
-                            "PAYROLL_PRINT_SUCCESS",
-                            "MEDIUM",
-                            currentUser,
-                            "Successfully printed payroll slip"
-                        );
-                    }
-                    
-                    showInfoAlert("Print", "Payroll slip printed successfully!");
-                } else {
-                    // Log failed print
-                    if (currentUser != null) {
-                        SecurityLogger.logSecurityEvent(
-                            "PAYROLL_PRINT_FAILED",
-                            "MEDIUM",
-                            currentUser,
-                            "Failed to print payroll slip"
-                        );
-                    }
-                    
-                    showErrorAlert("Print Error", "Failed to print payroll slip.");
-                }
-            } else {
-                // Log print cancellation
-                if (currentUser != null) {
-                    SecurityLogger.logSecurityEvent(
-                        "PAYROLL_PRINT_CANCELLED",
-                        "LOW",
-                        currentUser,
-                        "Cancelled printing payroll slip"
-                    );
-                }
-            }
-        } else {
-            // Log no printer available
+        if (job == null) {
+            showErrorAlert("Print Error", "No printer available.");
+            return;
+        }
+
+        boolean showDialog = job.showPrintDialog(stage.getOwner());
+        if (!showDialog) {
             if (currentUser != null) {
                 SecurityLogger.logSecurityEvent(
-                    "PAYROLL_PRINT_NO_PRINTER",
+                    "PAYROLL_PRINT_CANCELLED",
                     "LOW",
                     currentUser,
-                    "Attempted to print but no printer available"
+                    "Cancelled printing payroll slip"
                 );
             }
-            
-            showErrorAlert("Print Error", "No printer available.");
+            return;
+        }
+
+        // ===============================
+        // SET PAPER SIZE (SHORT BOND)
+        // ===============================
+        Printer printer = job.getPrinter();
+        PageLayout pageLayout = printer.createPageLayout(
+                Paper.NA_LETTER,                 // Short bond (8.5 x 11)
+                PageOrientation.PORTRAIT,
+                Printer.MarginType.DEFAULT
+        );
+
+        // Hide buttons before printing
+        buttonBox.setVisible(false);
+        buttonBox.setManaged(false);
+
+        // ===============================
+        // AUTO SCALE CONTENT TO FIT PAGE
+        // ===============================
+        double printableWidth = pageLayout.getPrintableWidth();
+        double printableHeight = pageLayout.getPrintableHeight();
+
+        double nodeWidth = content.getBoundsInParent().getWidth();
+        double nodeHeight = content.getBoundsInParent().getHeight();
+
+        double scaleX = printableWidth / nodeWidth;
+        double scaleY = printableHeight / nodeHeight;
+        double scale = Math.min(scaleX, scaleY);
+
+        Scale scaleTransform = new Scale(scale, scale);
+        content.getTransforms().add(scaleTransform);
+
+        boolean success = job.printPage(pageLayout, content);
+
+        // Restore UI
+        content.getTransforms().remove(scaleTransform);
+        buttonBox.setVisible(true);
+        buttonBox.setManaged(true);
+
+        if (success) {
+            job.endJob();
+
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "PAYROLL_PRINT_SUCCESS",
+                    "MEDIUM",
+                    currentUser,
+                    "Successfully printed payroll slip"
+                );
+            }
+
+            showInfoAlert("Print", "Payroll slip printed successfully!");
+        } else {
+            if (currentUser != null) {
+                SecurityLogger.logSecurityEvent(
+                    "PAYROLL_PRINT_FAILED",
+                    "MEDIUM",
+                    currentUser,
+                    "Failed to print payroll slip"
+                );
+            }
+
+            showErrorAlert("Print Error", "Failed to print payroll slip.");
         }
     }
 

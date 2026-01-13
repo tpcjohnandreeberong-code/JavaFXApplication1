@@ -8,51 +8,51 @@
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.control.TextField?>
-<?import javafx.scene.layout.HBox?>
-<?import javafx.scene.layout.VBox?>
-<?import javafx.scene.layout.Region?>
 <?import javafx.scene.effect.DropShadow?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
 
-<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="javafxapplication1.ImportExportController" spacing="16.0" style="-fx-background-color: #f5f5f5;">
+<VBox spacing="16.0" style="-fx-background-color: #f5f5f5;" xmlns:fx="http://javafx.com/fxml/1" xmlns="http://javafx.com/javafx/25" fx:controller="javafxapplication1.ImportExportController">
 <children>
 <!-- Header Section -->
 <HBox alignment="CENTER_LEFT" spacing="10.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;">
 <children>
-<Label text="Attendance Log Manager" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
+<Label style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" text="Attendance Log Manager" />
 <Region HBox.hgrow="ALWAYS" />
-<Button fx:id="importAttendanceLogButton" text="Import Attendance Log" onAction="#onImportData" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" />
+<Button fx:id="importAttendanceLogButton" onAction="#onImportData" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" text="Import Attendance Log" visible="false" />
 </children>
 <effect>
-<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
+<DropShadow color="#00000020" offsetY="2.0" radius="4.0" />
 </effect>
 </HBox>
 
 <!-- Import Section -->
 <VBox spacing="8.0" style="-fx-background-color: white; -fx-background-radius: 8; -fx-padding: 16;">
 <children>
-<Label text="Import Attendance Log" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
+<Label style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" text="Import Attendance Log" />
 <HBox alignment="CENTER_LEFT" spacing="10.0">
 <children>
-<Label text="File Format:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-<ComboBox fx:id="importFileFormat" promptText="Select Format" prefWidth="150.0" style="-fx-background-radius: 6;" />
-<Button fx:id="browseFileButton" text="Browse File" onAction="#onBrowseImportFile" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
-<Button fx:id="previewDataButton" text="Preview Data" onAction="#onPreviewImportData" style="-fx-background-color: #f57c00; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
-<Button fx:id="importNowButton" text="Import Now" onAction="#onImportNow" style="-fx-background-color: #2e7d32; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" />
+<Label style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" text="File Format:" />
+<ComboBox fx:id="importFileFormat" prefWidth="150.0" promptText="Select Format" style="-fx-background-radius: 6;" />
+<Button fx:id="browseFileButton" onAction="#onBrowseImportFile" style="-fx-background-color: #66bb6a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Browse File" />
+<Button fx:id="previewDataButton" onAction="#onPreviewImportData" style="-fx-background-color: #f57c00; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Preview Data" />
+<Button fx:id="importNowButton" onAction="#onImportNow" style="-fx-background-color: #2e7d32; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6;" text="Import Now" />
 </children>
 </HBox>
-<Label fx:id="importFileLabel" text="No attendance log file selected" style="-fx-text-fill: #666; -fx-font-style: italic;" />
-<ProgressBar fx:id="importProgressBar" visible="false" prefWidth="400.0" prefHeight="20.0" />
+<Label fx:id="importFileLabel" style="-fx-text-fill: #666; -fx-font-style: italic;" text="No attendance log file selected" />
+<ProgressBar fx:id="importProgressBar" prefHeight="20.0" prefWidth="400.0" visible="false" />
 <!-- File Loading Progress -->
-<VBox fx:id="fileLoadingSection" spacing="8.0" visible="false" managed="false" style="-fx-alignment: center; -fx-padding: 10;">
+<VBox fx:id="fileLoadingSection" managed="false" spacing="8.0" style="-fx-alignment: center; -fx-padding: 10;" visible="false">
 <children>
-<Label fx:id="fileLoadingLabel" text="Processing attendance file..." style="-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-<ProgressBar fx:id="fileProgressBar" prefWidth="400.0" prefHeight="20.0" progress="0.0" />
-<Label fx:id="fileProgressLabel" text="Reading file..." style="-fx-font-size: 12px; -fx-text-fill: #666;" />
+<Label fx:id="fileLoadingLabel" style="-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #2e7d32;" text="Processing attendance file..." />
+<ProgressBar fx:id="fileProgressBar" prefHeight="20.0" prefWidth="400.0" progress="0.0" />
+<Label fx:id="fileProgressLabel" style="-fx-font-size: 12px; -fx-text-fill: #666;" text="Reading file..." />
 </children>
 </VBox>
 </children>
 <effect>
-<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
+<DropShadow color="#00000020" offsetY="2.0" radius="4.0" />
 </effect>
 </VBox>
 
@@ -62,42 +62,42 @@
 <children>
 <HBox alignment="CENTER_LEFT" spacing="10.0">
 <children>
-<Label text="Attendance Log Preview" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" />
+<Label style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" text="Attendance Log Preview" />
 <Region HBox.hgrow="ALWAYS" />
-<Button text="Refresh Data" onAction="#onRefreshPreview" style="-fx-background-color: #4caf50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 6 12;" />
-<Button text="Show Statistics" onAction="#onShowStatistics" style="-fx-background-color: #ff9800; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 6 12;" />
+<Button onAction="#onRefreshPreview" style="-fx-background-color: #4caf50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 6 12;" text="Refresh Data" />
+<Button onAction="#onShowStatistics" style="-fx-background-color: #ff9800; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 6 12;" text="Show Statistics" />
 </children>
 </HBox>
 <!-- Search/Filter Section -->
 <HBox alignment="CENTER_LEFT" spacing="10.0" style="-fx-padding: 8; -fx-background-color: #f5f5f5; -fx-background-radius: 6;">
 <children>
-<Label text="Search:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-<TextField fx:id="searchField" promptText="Search by Name or Account Number..." prefWidth="200.0" style="-fx-background-radius: 6;" onKeyReleased="#onSearchKeyReleased" />
-<Label text="Filter by Log Type:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-<ComboBox fx:id="logTypeFilter" promptText="All Log Types" prefWidth="150.0" style="-fx-background-radius: 6;" onAction="#onFilterChanged" />
-<Label text="Date:" style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" />
-<TextField fx:id="dateFilter" promptText="YYYY-MM-DD" prefWidth="120.0" style="-fx-background-radius: 6;" onKeyReleased="#onSearchKeyReleased" />
-<Button text="Clear Filters" onAction="#onClearFilters" style="-fx-background-color: #757575; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 4 8;" />
+<Label style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" text="Search:" />
+<TextField fx:id="searchField" onKeyReleased="#onSearchKeyReleased" prefWidth="200.0" promptText="Search by Name or Account Number..." style="-fx-background-radius: 6;" />
+<Label style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" text="Filter by Log Type:" />
+<ComboBox fx:id="logTypeFilter" onAction="#onFilterChanged" prefWidth="150.0" promptText="All Log Types" style="-fx-background-radius: 6;" />
+<Label style="-fx-font-weight: bold; -fx-text-fill: #2e7d32;" text="Date:" />
+<TextField fx:id="dateFilter" onKeyReleased="#onSearchKeyReleased" prefWidth="120.0" promptText="YYYY-MM-DD" style="-fx-background-radius: 6;" />
+<Button onAction="#onClearFilters" style="-fx-background-color: #757575; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 4 8;" text="Clear Filters" />
 </children>
 </HBox>
 <TableView fx:id="importPreviewTable" prefHeight="300.0" style="-fx-background-color: transparent;" VBox.vgrow="ALWAYS">
 <columns>
-<TableColumn fx:id="colPreview1" text="Fullname" prefWidth="200.0" />
-<TableColumn fx:id="colPreview2" text="Account Number" prefWidth="120.0" />
-<TableColumn fx:id="colPreview3" text="Date &amp; Time" prefWidth="160.0" />
-<TableColumn fx:id="colPreview4" text="Log Type" prefWidth="120.0" />
-<TableColumn fx:id="colPreview5" text="Raw Data" prefWidth="300.0" />
-<TableColumn fx:id="colPreview6" text="Status" prefWidth="150.0" />
+<TableColumn fx:id="colPreview1" prefWidth="200.0" text="Fullname" />
+<TableColumn fx:id="colPreview2" prefWidth="120.0" text="Account Number" />
+<TableColumn fx:id="colPreview3" prefWidth="160.0" text="Date &amp; Time" />
+<TableColumn fx:id="colPreview4" prefWidth="120.0" text="Log Type" />
+<TableColumn fx:id="colPreview5" prefWidth="300.0" text="Raw Data" />
+<TableColumn fx:id="colPreview6" prefWidth="150.0" text="Status" />
 </columns>
 </TableView>
 </children>
 <effect>
-<DropShadow radius="4.0" color="#00000020" offsetY="2.0" />
+<DropShadow color="#00000020" offsetY="2.0" radius="4.0" />
 </effect>
 </VBox>
 
 </children>
 <padding>
-<Insets top="16.0" right="16.0" bottom="16.0" left="16.0" />
+<Insets bottom="16.0" left="16.0" right="16.0" top="16.0" />
 </padding>
 </VBox>

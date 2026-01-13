@@ -71,7 +71,7 @@ public class AttendanceProcessorController implements Initializable {
     public void initialize(URL url, ResourceBundle rb) {
         setupTableColumns();
         initializeDatabase();
-        setupDatePickers();
+
         loadProcessedAttendanceData();
         
         // Setup permission-based button visibility
@@ -205,12 +205,7 @@ public class AttendanceProcessorController implements Initializable {
         table.setItems(processedData);
     }
     
-    private void setupDatePickers() {
-        // Set default date range to current month
-        LocalDate now = LocalDate.now();
-        dateFromPicker.setValue(now.withDayOfMonth(1)); // First day of current month
-        dateToPicker.setValue(now); // Today
-    }
+   
     
     private void initializeDatabase() {
         try {
