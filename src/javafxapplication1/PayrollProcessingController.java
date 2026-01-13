@@ -1577,8 +1577,13 @@ public class PayrollProcessingController implements Initializable {
             );
         }
 
-        // Get payroll data
-        List<PayrollRecord> payrollList = PayrollService.getPayrollRecords();
+        // Get filtered payroll data from the table (only visible records)
+        ObservableList<PayrollProcessEntry> payrollList = payrollTable.getItems();
+        
+        if (payrollList == null || payrollList.isEmpty()) {
+            showErrorAlert("No Data", "No payroll records to export. Please apply filters to show data.");
+            return;
+        }
 
         // Open a file chooser to save the CSV file (can be opened in Excel)
         FileChooser fileChooser = new FileChooser();
@@ -1591,21 +1596,69 @@ public class PayrollProcessingController implements Initializable {
         
         if (file != null) {
             try (PrintWriter writer = new PrintWriter(file)) {
-                // Write header row
-                writer.println("Employee ID,Employee Name,Position,Basic Salary,Overtime,Allowances,Deductions,Net Pay,Status");
+                // Determine date range from filtered data
+                String dateRangeHeader = "";
+                DateTimeFormatter displayFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
                 
-                // Write payroll data
-                for (PayrollRecord record : payrollList) {
-                    writer.printf("%d,\"%s\",\"%s\",%.2f,%.2f,%.2f,%.2f,%.2f,\"%s\"%n",
-                            record.getEmployeeId(),
-                            record.getEmployeeName(),
-                            record.getPosition(),
-                            record.getBasicSalary(),
-                            record.getOvertime(),
-                            record.getAllowances(),
-                            record.getDeductions(),
-                            record.getNetPay(),
-                            record.getStatus());
+                // Get the selected month and year filters
+                String selectedMonth = monthFilter.getValue();
+                String selectedYear = yearFilter.getValue();
+                
+                // Try to get date range from date pickers first
+                LocalDate startDate = startDatePicker.getValue();
+                LocalDate endDate = endDatePicker.getValue();
+                
+                if (startDate != null && endDate != null) {
+                    // Use date pickers
+                    if (startDate.equals(endDate)) {
+                        // Single date
+                        dateRangeHeader = "Payroll Report - " + startDate.format(displayFormatter);
+                    } else {
+                        // Date range
+                        dateRangeHeader = "Payroll Report - " + startDate.format(displayFormatter) + " to " + endDate.format(displayFormatter);
+                    }
+                } else if (selectedMonth != null && !selectedMonth.equals("All Months") && 
+                          selectedYear != null && !selectedYear.equals("All Years")) {
+                    // Use month and year filters
+                    dateRangeHeader = "Payroll Report - " + selectedMonth + " " + selectedYear;
+                } else if (selectedYear != null && !selectedYear.equals("All Years")) {
+                    // Use year filter only
+                    dateRangeHeader = "Payroll Report - Year " + selectedYear;
+                } else if (selectedMonth != null && !selectedMonth.equals("All Months")) {
+                    // Use month filter only
+                    dateRangeHeader = "Payroll Report - " + selectedMonth;
+                } else {
+                    // No specific filter, use current date
+                    dateRangeHeader = "Payroll Report - " + LocalDate.now().format(displayFormatter);
+                }
+                
+                // Write date header
+                writer.println(dateRangeHeader);
+                writer.println(); // Empty line for separation
+                
+                // Write column header row
+                writer.println("Employee ID,Account Number,Employee Name,Position,Pay Period Start,Pay Period End,Basic Salary,Present Days,Absent Days,Late Occurrences,Overtime Hours,Basic Pay,Overtime Pay,Allowances,Total Deductions,Net Pay,Status");
+                
+                // Write payroll data from table
+                for (PayrollProcessEntry entry : payrollList) {
+                    writer.printf("%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%.2f,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,\"%s\"%n",
+                            entry.getEmployeeId(),
+                            entry.getAccountNumber(),
+                            entry.getEmployeeName(),
+                            entry.getPosition(),
+                            entry.getPayPeriodStart(),
+                            entry.getPayPeriodEnd(),
+                            entry.getBasicSalary(),
+                            entry.getPresentDays(),
+                            entry.getAbsentDays(),
+                            entry.getLateOccurrences(),
+                            entry.getOvertimeHours(),
+                            entry.getBasicPay(),
+                            entry.getOvertimePay(),
+                            entry.getAllowances(),
+                            entry.getTotalDeductions(),
+                            entry.getNetPay(),
+                            entry.getStatus());
                 }
                 
                 // Log successful export
@@ -1614,12 +1667,13 @@ public class PayrollProcessingController implements Initializable {
                             "PAYROLL_EXPORT_SUCCESS",
                             "MEDIUM",
                             currentUser,
-                            "Successfully exported " + payrollList.size() + " payroll records to CSV"
+                            "Successfully exported " + payrollList.size() + " payroll records to CSV - Filter: " + dateRangeHeader
                     );
                 }
 
                 showInfoAlert("Export Successful", "Payroll exported successfully!\n" +
-                        "Records exported: " + payrollList.size() + "\n\n" +
+                        "Records exported: " + payrollList.size() + "\n" +
+                        "Filter: " + dateRangeHeader + "\n\n" +
                         "Note: CSV file can be opened in Microsoft Excel");
             } catch (IOException e) {
                 e.printStackTrace();
