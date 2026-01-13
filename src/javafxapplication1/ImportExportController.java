@@ -93,7 +93,7 @@ public class ImportExportController implements Initializable {
     @FXML private TableColumn<ImportPreviewData, String> colPreview6;
     
     // Action buttons
-    @FXML private Button importAttendanceLogButton;
+    // @FXML private Button importAttendanceLogButton;
     @FXML private Button browseFileButton;
     @FXML private Button previewDataButton;
     @FXML private Button importNowButton;
@@ -142,22 +142,22 @@ public class ImportExportController implements Initializable {
                 
                 // Show/hide buttons based on permissions
                 // All import-related buttons use import_export.import permission
-                if (importAttendanceLogButton != null) {
-                    importAttendanceLogButton.setVisible(canImport);
-                    importAttendanceLogButton.setManaged(canImport);
-                }
-                if (browseFileButton != null) {
-                    browseFileButton.setVisible(canImport);
-                    browseFileButton.setManaged(canImport);
-                }
-                if (previewDataButton != null) {
-                    previewDataButton.setVisible(canImport);
-                    previewDataButton.setManaged(canImport);
-                }
-                if (importNowButton != null) {
-                    importNowButton.setVisible(canImport);
-                    importNowButton.setManaged(canImport);
-                }
+                // if (importAttendanceLogButton != null) {
+                //     importAttendanceLogButton.setVisible(canImport);
+                //     importAttendanceLogButton.setManaged(canImport);
+                // }
+                // if (browseFileButton != null) {
+                //     browseFileButton.setVisible(canImport);
+                //     browseFileButton.setManaged(canImport);
+                // }
+                // if (previewDataButton != null) {
+                //     previewDataButton.setVisible(canImport);
+                //     previewDataButton.setManaged(canImport);
+                // }
+                // if (importNowButton != null) {
+                //     importNowButton.setVisible(canImport);
+                //     importNowButton.setManaged(canImport);
+                // }
                 
                 logger.info("Import/Export buttons visibility - Import: " + canImport + ", Export: " + canExport);
                 
@@ -173,10 +173,10 @@ public class ImportExportController implements Initializable {
     }
     
     private void hideAllActionButtons() {
-        if (importAttendanceLogButton != null) {
-            importAttendanceLogButton.setVisible(false);
-            importAttendanceLogButton.setManaged(false);
-        }
+        // if (importAttendanceLogButton != null) {
+        //     importAttendanceLogButton.setVisible(false);
+        //     importAttendanceLogButton.setManaged(false);
+        // }
         if (browseFileButton != null) {
             browseFileButton.setVisible(false);
             browseFileButton.setManaged(false);

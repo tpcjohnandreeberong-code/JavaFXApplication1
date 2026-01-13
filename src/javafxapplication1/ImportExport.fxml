@@ -20,7 +20,7 @@
 <children>
 <Label style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #1b5e20;" text="Attendance Log Manager" />
 <Region HBox.hgrow="ALWAYS" />
-<Button fx:id="importAttendanceLogButton" onAction="#onImportData" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" text="Import Attendance Log" visible="false" />
+<!-- <Button fx:id="importAttendanceLogButton" onAction="#onImportData" style="-fx-background-color: linear-gradient(to right, #2e7d32, #43a047); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 8 16;" text="Import Attendance Log" visible="false" /> -->
 </children>
 <effect>
 <DropShadow color="#00000020" offsetY="2.0" radius="4.0" />
