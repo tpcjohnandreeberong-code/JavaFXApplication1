@@ -1329,11 +1329,15 @@ public class PayrollProcessingController implements Initializable {
             // Separator
             root.getChildren().add(createSeparator());
             
+            
+            
             // Loan Balances Section
             VBox loanBox = new VBox(5);
             Label loanTitle = new Label("LOAN BALANCES");
             loanTitle.setFont(Font.font("Arial", FontWeight.BOLD, 12));
             loanBox.getChildren().add(loanTitle);
+            
+            
             
             // Get all loan balances from database
             double mplBalance = getLoanBalance(conn, entry.getEmployeeId(), "MPL Loan");
@@ -1365,11 +1369,11 @@ public class PayrollProcessingController implements Initializable {
             netPayBox.getChildren().addAll(netPayLabel, netPayValue);
             root.getChildren().add(netPayBox);
             
-            // Buttons (will be hidden when printing)
+          
             HBox buttonBox = new HBox(10);
             buttonBox.setAlignment(Pos.CENTER);
             buttonBox.setPadding(new Insets(20, 0, 0, 0));
-            buttonBox.setId("buttonBox"); // Add ID for easy reference when printing
+            buttonBox.setId("buttonBox"); /
             
             Button printButton = new Button("Print");
             printButton.setStyle("-fx-background-color: #2e7d32; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 20;");
