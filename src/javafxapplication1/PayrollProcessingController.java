@@ -1373,7 +1373,7 @@ public class PayrollProcessingController implements Initializable {
             HBox buttonBox = new HBox(10);
             buttonBox.setAlignment(Pos.CENTER);
             buttonBox.setPadding(new Insets(20, 0, 0, 0));
-            buttonBox.setId("buttonBox"); /
+            buttonBox.setId("buttonBox"); 
             
             Button printButton = new Button("Print");
             printButton.setStyle("-fx-background-color: #2e7d32; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 20;");
