@@ -435,7 +435,7 @@ public class MainController implements Initializable {
             // Load payroll processed this month
             String payrollQuery = """
                 SELECT COUNT(DISTINCT employee_id) as processed 
-                FROM payroll_sheet_items 
+                FROM payroll_process 
                 WHERE MONTH(created_at) = MONTH(CURRENT_DATE()) 
                 AND YEAR(created_at) = YEAR(CURRENT_DATE())
                 """;
