@@ -1357,8 +1357,9 @@ public class PayrollProcessingController implements Initializable {
             // Separator
             root.getChildren().add(createSeparator());
             
-            // Net Pay Section - Recalculate based on grossEarned and totalDeductions
-            double netPay = grossEarned - totalDeductions;
+            // Net Pay Section - Use the stored net_pay from database instead of recalculating
+            // This ensures consistency with the payroll table display
+            double netPay = entry.getNetPay();
             HBox netPayBox = new HBox(10);
             netPayBox.setAlignment(Pos.CENTER_RIGHT);
             Label netPayLabel = new Label("NET PAY");

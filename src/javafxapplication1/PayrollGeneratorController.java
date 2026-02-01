@@ -1019,28 +1019,23 @@ public class PayrollGeneratorController implements Initializable {
                     }
                 }
                 
-                // 4b. Get employee-specific deductions
-                String employeeDeductionsSQL = """
-                    SELECT ed.amount, dt.name 
-                    FROM employee_deductions ed
-                    JOIN deduction_types dt ON ed.deduction_type_id = dt.id
-                    WHERE ed.employee_id = ?
-                    """;
+                // 4b. Get employee-specific deductions for THIS pay period only
+                // Note: Only include deductions that are already saved in payroll_process for this period
+                // Don't pull from employee_deductions table as it may contain old/duplicate entries
                 
-                try (Connection conn = getConnection();
-                     PreparedStatement stmt = conn.prepareStatement(employeeDeductionsSQL)) {
-                    
-                    stmt.setInt(1, employee.getId());
-                    ResultSet rs = stmt.executeQuery();
-                    while (rs.next()) {
-                        totalDeductions += rs.getDouble("amount");
-                    }
+                // 4c. Calculate late and absent deductions ONLY if there are actual late minutes or absences
+                double lateDeduction = 0;
+                double absentDeduction = 0;
+                
+                if (totalLateMinutes > 0) {
+                    lateDeduction = (totalLateMinutes / 60.0) * hourlyRate; // Deduct per hour of lateness
+                    totalDeductions += lateDeduction;
                 }
                 
-                // 4c. Calculate late and absent deductions
-                double lateDeduction = (totalLateMinutes / 60.0) * hourlyRate; // Deduct per hour of lateness
-                double absentDeduction = totalAbsentDays * (basicSalary / 22); // Per day deduction
-                totalDeductions += lateDeduction + absentDeduction;
+                if (totalAbsentDays > 0) {
+                    absentDeduction = totalAbsentDays * (basicSalary / 22); // Per day deduction
+                    totalDeductions += absentDeduction;
+                }
                 
                 // 5. Calculate net pay
                 double netPay = basicSalary + overtimePay - totalDeductions;

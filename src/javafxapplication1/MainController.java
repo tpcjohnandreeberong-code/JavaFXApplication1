@@ -432,12 +432,12 @@ public class MainController implements Initializable {
                 totalEmployeesLabel.setText(String.valueOf(totalEmployees));
             }
             
-            // Load payroll processed this month
+            // Load payroll processed this month (based on pay period, not creation date)
             String payrollQuery = """
                 SELECT COUNT(DISTINCT employee_id) as processed 
                 FROM payroll_process 
-                WHERE MONTH(created_at) = MONTH(CURRENT_DATE()) 
-                AND YEAR(created_at) = YEAR(CURRENT_DATE())
+                WHERE (MONTH(pay_period_start) = MONTH(CURRENT_DATE()) AND YEAR(pay_period_start) = YEAR(CURRENT_DATE()))
+                   OR (MONTH(pay_period_end) = MONTH(CURRENT_DATE()) AND YEAR(pay_period_end) = YEAR(CURRENT_DATE()))
                 """;
             stmt = connection.prepareStatement(payrollQuery);
             rs = stmt.executeQuery();
